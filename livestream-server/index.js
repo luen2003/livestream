@@ -9,7 +9,8 @@ const server = http.createServer(app);
 
 const io = socketIo(server, {
   cors: {
-    origin: "http://localhost:3000",  // URL của client
+   // origin: "http://localhost:3000",  // URL của client
+    origin: "https://react-livestream-app.onrender.com/",  // URL của client
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -22,7 +23,8 @@ const users = {};  // Lưu userName theo socketId (bao gồm cả broadcaster v�
 
 // Middleware
 app.use(cors({
-  origin: "http://localhost:3000",  // URL của client
+  //origin: "http://localhost:3000",  // URL của client
+  origin: "https://react-livestream-app.onrender.com/",  // URL của client
   methods: ["GET", "POST"],
   credentials: true
 }));
