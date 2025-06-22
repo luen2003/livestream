@@ -7,12 +7,14 @@ export default function Viewer({ broadcasterId }) {
   const [isViewing, setIsViewing] = useState(false);
   const [error, setError] = useState('');
 
+  // Gửi tên người xem lên server mỗi khi thay đổi userName
   useEffect(() => {
     if (userName.trim()) {
       socket.emit('setUserName', userName);
     }
   }, [userName]);
 
+  // Hàm bắt đầu xem livestream
   const handleStartViewing = () => {
     setError('');
     if (!userName.trim()) {
@@ -23,27 +25,32 @@ export default function Viewer({ broadcasterId }) {
     socket.emit('watcher', broadcasterId);
   };
 
+  // Kết nối WebRTC và lắng nghe các tín hiệu
   useEffect(() => {
     if (!isViewing || !broadcasterId) return;
 
+    // Khởi tạo peer connection
     const peerConnection = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }], // STUN server
     });
 
+    // Lắng nghe khi nhận được stream từ broadcaster
     peerConnection.ontrack = (event) => {
       if (remoteVideo.current) {
-        remoteVideo.current.srcObject = event.streams[0];
+        remoteVideo.current.srcObject = event.streams[0]; // Gán stream vào video
       }
     };
 
+    // Lắng nghe khi có ICE candidate
     peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
         socket.emit('candidate', broadcasterId, event.candidate);
       }
     };
 
+    // Lắng nghe offer từ broadcaster và tạo answer
     socket.on('offer', async (id, description) => {
-      if (id !== broadcasterId) return;
+      if (id !== broadcasterId) return; // Kiểm tra ID broadcaster
 
       try {
         await peerConnection.setRemoteDescription(new RTCSessionDescription(description));
@@ -55,11 +62,13 @@ export default function Viewer({ broadcasterId }) {
       }
     });
 
+    // Lắng nghe ICE candidate từ broadcaster
     socket.on('candidate', (id, candidate) => {
-      if (id !== broadcasterId) return;
+      if (id !== broadcasterId) return; // Kiểm tra ID broadcaster
       peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
     });
 
+    // Dọn dẹp khi component unmount
     return () => {
       peerConnection.close();
       socket.off('offer');
@@ -67,6 +76,7 @@ export default function Viewer({ broadcasterId }) {
     };
   }, [isViewing, broadcasterId]);
 
+  // Nếu người xem chưa nhập tên, hiển thị form nhập tên
   if (!isViewing) {
     return (
       <div>
@@ -90,6 +100,7 @@ export default function Viewer({ broadcasterId }) {
     );
   }
 
+  // Nếu người xem đã nhập tên, hiển thị video
   return (
     <div>
       <video
