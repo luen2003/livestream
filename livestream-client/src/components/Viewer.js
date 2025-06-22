@@ -1,20 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { socket } from '../socket'; // Chắc chắn bạn có socket instance từ trước
+import { socket } from '../socket';
 
 export default function Viewer({ broadcasterId }) {
-  const remoteVideo = useRef(null);  // Reference tới video element
+  const remoteVideo = useRef(null); // Khai báo ref cho video
   const [userName, setUserName] = useState('');
   const [isViewing, setIsViewing] = useState(false);
   const [error, setError] = useState('');
 
-  // Gửi tên người xem lên server mỗi khi thay đổi userName
+  // Khi người dùng nhập tên, gửi lên server để lưu trữ
   useEffect(() => {
     if (userName.trim()) {
-      socket.emit('setUserName', userName);
+      socket.emit('setUserName', userName); // Gửi tên người dùng lên server
     }
   }, [userName]);
 
-  // Hàm bắt đầu xem livestream
+  // Khi người dùng bắt đầu xem livestream
   const handleStartViewing = () => {
     setError('');
     if (!userName.trim()) {
@@ -22,60 +22,55 @@ export default function Viewer({ broadcasterId }) {
       return;
     }
     setIsViewing(true);
-    socket.emit('watcher', broadcasterId);  // Gửi broadcasterId cho server
+    socket.emit('watcher', broadcasterId); // Yêu cầu xem livestream từ broadcaster
   };
 
-  // Kết nối WebRTC và lắng nghe các tín hiệu
   useEffect(() => {
     if (!isViewing || !broadcasterId) return;
 
+    // Tạo peer connection khi bắt đầu xem livestream
     const peerConnection = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]  // STUN server
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
     });
 
-    // Lắng nghe khi nhận được stream từ broadcaster
     peerConnection.ontrack = (event) => {
       if (remoteVideo.current) {
-        remoteVideo.current.srcObject = event.streams[0]; // Gán stream vào video
+        remoteVideo.current.srcObject = event.streams[0]; // Phát video livestream
       }
     };
 
-    // Lắng nghe khi có ICE candidate
     peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
-        socket.emit('candidate', broadcasterId, event.candidate);
+        socket.emit('candidate', broadcasterId, event.candidate); // Gửi ICE candidate
       }
     };
 
-    // Lắng nghe offer từ broadcaster và tạo answer
     socket.on('offer', async (id, description) => {
-      if (id !== broadcasterId) return; // Kiểm tra ID broadcaster
+      if (id !== broadcasterId) return;
 
       try {
         await peerConnection.setRemoteDescription(new RTCSessionDescription(description));
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
-        socket.emit('answer', broadcasterId, answer);
+        socket.emit('answer', broadcasterId, answer); // Gửi answer tới broadcaster
       } catch (error) {
         console.error('Error handling offer:', error);
       }
     });
 
-    // Lắng nghe ICE candidate từ broadcaster
     socket.on('candidate', (id, candidate) => {
-      if (id !== broadcasterId) return; // Kiểm tra ID broadcaster
-      peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
+      if (id !== broadcasterId) return;
+      peerConnection.addIceCandidate(new RTCIceCandidate(candidate)); // Thêm ICE candidate
     });
 
-    // Dọn dẹp khi component unmount
     return () => {
+      // Khi component bị unmount, đóng peer connection
       peerConnection.close();
       socket.off('offer');
       socket.off('candidate');
     };
   }, [isViewing, broadcasterId]);
 
-  // Nếu người xem chưa nhập tên, hiển thị form nhập tên
   if (!isViewing) {
     return (
       <div>
@@ -99,7 +94,6 @@ export default function Viewer({ broadcasterId }) {
     );
   }
 
-  // Nếu người xem đã nhập tên, hiển thị video
   return (
     <div>
       <video

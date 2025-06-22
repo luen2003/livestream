@@ -9,72 +9,72 @@ export default function Broadcaster() {
   const [userName, setUserName] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState('');
-  const [viewersCount, setViewersCount] = useState(0);  // Trạng thái số người xem
 
   useEffect(() => {
     if (!isStreaming) return;
 
-    // Lấy media stream từ camera và microphone
-    const getMediaStream = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-          audio: true
-        });
-        localVideo.current.srcObject = stream;  // Gán stream vào video
-        return stream;
-      } catch (err) {
-        console.error("Error accessing media devices.", err);
-        setError("Không thể truy cập camera và microphone.");
-        setIsStreaming(false);
-      }
-    };
+    // Gửi đúng object với key livestreamName
+    socket.emit('broadcaster', { livestreamName: streamName, userName });
 
-    getMediaStream().then(stream => {
-      socket.emit('broadcaster', { livestreamName: streamName, userName });
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      .then(stream => {
+        localVideo.current.srcObject = stream;
 
-      // Lắng nghe khi có người xem
-      socket.on('watcher', async watcherId => {
-        const pc = new RTCPeerConnection({
-          iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-        });
+        socket.on('watcher', async watcherId => {
+          const pc = new RTCPeerConnection({
+            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
+          });
 
-        peerConnections.current[watcherId] = pc;
+          peerConnections.current[watcherId] = pc;
 
-        stream.getTracks().forEach(track => pc.addTrack(track, stream));
+          stream.getTracks().forEach(track => pc.addTrack(track, stream));
 
-        pc.onicecandidate = e => {
-          if (e.candidate) {
-            socket.emit('candidate', watcherId, e.candidate);
+          pc.onicecandidate = e => {
+            if (e.candidate) {
+              socket.emit('candidate', watcherId, e.candidate);
+            }
+          };
+
+          try {
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            socket.emit('offer', watcherId, pc.localDescription);
+          } catch (err) {
+            console.error('Error creating or sending offer:', err);
           }
-        };
+        });
 
-        try {
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          socket.emit('offer', watcherId, pc.localDescription);
-        } catch (err) {
-          console.error('Error creating or sending offer:', err);
-        }
+        socket.on('answer', (id, description) => {
+          const pc = peerConnections.current[id];
+          if (!pc) return;
+          pc.setRemoteDescription(new RTCSessionDescription(description)).catch(console.error);
+        });
 
-        // Cập nhật số người xem
-        socket.emit('getBroadcastersList');
+        socket.on('candidate', (id, candidate) => {
+          const pc = peerConnections.current[id];
+          if (pc) {
+            pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(console.error);
+          }
+        });
+
+        socket.on('disconnectPeer', id => {
+          const pc = peerConnections.current[id];
+          if (pc) {
+            pc.close();
+            delete peerConnections.current[id];
+          }
+        });
+      })
+      .catch(err => {
+        console.error('getUserMedia error:', err);
+        setError('Không thể truy cập camera và microphone');
       });
-
-      // Lắng nghe sự thay đổi số lượng người xem
-      socket.on('broadcastersList', (broadcasters) => {
-        const broadcaster = broadcasters.find(b => b.id === socket.id);
-        if (broadcaster) {
-          setViewersCount(broadcaster.viewersCount);
-        }
-      });
-    });
 
     return () => {
       socket.off('watcher');
       socket.off('answer');
       socket.off('candidate');
-      socket.off('broadcastersList');
+      socket.off('disconnectPeer');
 
       Object.values(peerConnections.current).forEach(pc => pc.close());
       peerConnections.current = {};
@@ -135,9 +135,6 @@ export default function Broadcaster() {
         <div>
           <div style={{ marginBottom: 10 }}>
             <strong>{`Livestream: ${streamName} - Người dùng: ${userName}`}</strong>
-          </div>
-          <div style={{ marginBottom: 10 }}>
-            <span>{`Số người xem: ${viewersCount}`}</span> {/* Hiển thị số người xem */}
           </div>
           <video
             ref={localVideo}

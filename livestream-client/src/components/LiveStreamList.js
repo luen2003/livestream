@@ -26,7 +26,7 @@ export default function LiveStreamList() {
         {streams.map(stream => (
           <li key={stream.id}>
             <button onClick={() => setSelectedBroadcasterId(stream.id)}>
-              {stream.livestreamName} ({stream.viewersCount} người đang xem)
+              {stream.livestreamName} {/* Sửa thành livestreamName */}
             </button>
           </li>
         ))}
