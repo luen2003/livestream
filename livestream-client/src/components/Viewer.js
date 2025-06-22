@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { socket } from '../socket';  // Chắc chắn bạn có socket instance từ trước
+import { socket } from '../socket'; // Chắc chắn bạn có socket instance từ trước
 
 export default function Viewer({ broadcasterId }) {
-  const remoteVideo = useRef(null);
+  const remoteVideo = useRef(null);  // Reference tới video element
   const [userName, setUserName] = useState('');
   const [isViewing, setIsViewing] = useState(false);
   const [error, setError] = useState('');
@@ -29,9 +29,8 @@ export default function Viewer({ broadcasterId }) {
   useEffect(() => {
     if (!isViewing || !broadcasterId) return;
 
-    // Khởi tạo peer connection
     const peerConnection = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }], // STUN server
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]  // STUN server
     });
 
     // Lắng nghe khi nhận được stream từ broadcaster
@@ -53,7 +52,6 @@ export default function Viewer({ broadcasterId }) {
       if (id !== broadcasterId) return; // Kiểm tra ID broadcaster
 
       try {
-        console.log("Received offer from broadcaster, setting remote description");
         await peerConnection.setRemoteDescription(new RTCSessionDescription(description));
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
