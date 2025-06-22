@@ -6,7 +6,6 @@ const cors = require('cors');
 
 const app = express();
 const server = http.createServer(app);
-
 const io = socketIo(server, {
   cors: {
     origin: "http://localhost:3000",  // URL của client
@@ -18,6 +17,7 @@ const io = socketIo(server, {
 const PORT = process.env.PORT || 4000;
 
 const broadcasters = {};  // Lưu thông tin của broadcaster { socketId: {id, livestreamName, userName} }
+const viewers = {};  // Lưu danh sách người xem theo broadcasterId
 const users = {};  // Lưu userName theo socketId (bao gồm cả broadcaster và viewer)
 
 // Middleware
@@ -72,6 +72,15 @@ io.on('connection', socket => {
   socket.on('watcher', (broadcasterId) => {
     if (broadcasters[broadcasterId]) {
       socket.to(broadcasterId).emit('watcher', socket.id);
+
+      // Thêm viewer vào danh sách của broadcaster
+      if (!viewers[broadcasterId]) {
+        viewers[broadcasterId] = [];
+      }
+      viewers[broadcasterId].push(socket.id);
+
+      // Cập nhật số người xem cho broadcaster
+      io.to(broadcasterId).emit('viewerCount', viewers[broadcasterId].length);
     }
   });
 
@@ -88,25 +97,39 @@ io.on('connection', socket => {
     socket.to(id).emit('candidate', socket.id, message);
   });
 
-  // Chat message broadcast, kèm tên userName
-  socket.on('chat-message', (message) => {
-    const userName = users[socket.id] || 'Unknown';  // Lấy tên người dùng từ `users`
-    io.emit('chat-message', { id: socket.id, userName, message });
-  });
-
   // Khi ngắt kết nối
   socket.on('disconnect', () => {
     delete users[socket.id];
 
     if (broadcasters[socket.id]) {
+      // Xóa broadcaster khi ngắt kết nối
       delete broadcasters[socket.id];
       io.emit('broadcastersList', Object.values(broadcasters));
+
+      // Xóa viewer khỏi danh sách khi broadcaster ngắt kết nối
+      for (const broadcasterId in viewers) {
+        const index = viewers[broadcasterId].indexOf(socket.id);
+        if (index !== -1) {
+          viewers[broadcasterId].splice(index, 1);
+          io.to(broadcasterId).emit('viewerCount', viewers[broadcasterId].length);
+          break;
+        }
+      }
+    }
+
+    // Xóa viewer khỏi danh sách khi viewer ngắt kết nối
+    for (const broadcasterId in viewers) {
+      const index = viewers[broadcasterId].indexOf(socket.id);
+      if (index !== -1) {
+        viewers[broadcasterId].splice(index, 1);
+        io.to(broadcasterId).emit('viewerCount', viewers[broadcasterId].length);
+        break;
+      }
     }
 
     socket.broadcast.emit('disconnectPeer', socket.id);
   });
 });
-
 
 server.listen(PORT, () => {
   console.log(`Server is running at http://localhost:${PORT}`);

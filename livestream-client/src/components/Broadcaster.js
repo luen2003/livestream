@@ -9,6 +9,7 @@ export default function Broadcaster() {
   const [userName, setUserName] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState('');
+  const [viewerCount, setViewerCount] = useState(0); // Thêm state viewerCount
 
   useEffect(() => {
     if (!isStreaming) return;
@@ -64,6 +65,11 @@ export default function Broadcaster() {
             delete peerConnections.current[id];
           }
         });
+
+        // Lắng nghe sự kiện viewerCount để cập nhật số người xem
+        socket.on('viewerCount', (count) => {
+          setViewerCount(count);  // Cập nhật số người xem
+        });
       })
       .catch(err => {
         console.error('getUserMedia error:', err);
@@ -75,6 +81,7 @@ export default function Broadcaster() {
       socket.off('answer');
       socket.off('candidate');
       socket.off('disconnectPeer');
+      socket.off('viewerCount'); // Đảm bảo ngừng lắng nghe khi component unmount
 
       Object.values(peerConnections.current).forEach(pc => pc.close());
       peerConnections.current = {};
@@ -112,7 +119,7 @@ export default function Broadcaster() {
           </div>
           <div style={{ marginBottom: 10 }}>
             <label>
-              Tên Livestream: <br />
+              Tên livestream: <br />
               <input
                 type="text"
                 value={streamName}
@@ -122,11 +129,7 @@ export default function Broadcaster() {
               />
             </label>
           </div>
-          {error && (
-            <div style={{ color: 'red', marginBottom: 10 }}>
-              {error}
-            </div>
-          )}
+          {error && <div style={{ color: 'red', marginBottom: 10 }}>{error}</div>}
           <button onClick={handleStartStream} style={{ padding: '10px 20px', fontSize: 16 }}>
             Xác nhận và bắt đầu Livestream
           </button>
@@ -135,6 +138,8 @@ export default function Broadcaster() {
         <div>
           <div style={{ marginBottom: 10 }}>
             <strong>{`Livestream: ${streamName} - Người dùng: ${userName}`}</strong>
+            <br />
+            <span>Số người xem: {viewerCount}</span> {/* Hiển thị số người xem */}
           </div>
           <video
             ref={localVideo}

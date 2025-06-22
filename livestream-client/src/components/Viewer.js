@@ -2,19 +2,17 @@ import React, { useState, useEffect, useRef } from 'react';
 import { socket } from '../socket';
 
 export default function Viewer({ broadcasterId }) {
-  const remoteVideo = useRef(null); // Khai báo ref cho video
+  const remoteVideo = useRef(null);  // Khai báo ref cho video
   const [userName, setUserName] = useState('');
   const [isViewing, setIsViewing] = useState(false);
   const [error, setError] = useState('');
 
-  // Khi người dùng nhập tên, gửi lên server để lưu trữ
   useEffect(() => {
     if (userName.trim()) {
-      socket.emit('setUserName', userName); // Gửi tên người dùng lên server
+      socket.emit('setUserName', userName);  // Gửi tên người dùng lên server
     }
   }, [userName]);
 
-  // Khi người dùng bắt đầu xem livestream
   const handleStartViewing = () => {
     setError('');
     if (!userName.trim()) {
@@ -28,7 +26,6 @@ export default function Viewer({ broadcasterId }) {
   useEffect(() => {
     if (!isViewing || !broadcasterId) return;
 
-    // Tạo peer connection khi bắt đầu xem livestream
     const peerConnection = new RTCPeerConnection({
       iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
     });
@@ -52,7 +49,7 @@ export default function Viewer({ broadcasterId }) {
         await peerConnection.setRemoteDescription(new RTCSessionDescription(description));
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
-        socket.emit('answer', broadcasterId, answer); // Gửi answer tới broadcaster
+        socket.emit('answer', broadcasterId, answer);  // Gửi answer tới broadcaster
       } catch (error) {
         console.error('Error handling offer:', error);
       }
@@ -64,7 +61,6 @@ export default function Viewer({ broadcasterId }) {
     });
 
     return () => {
-      // Khi component bị unmount, đóng peer connection
       peerConnection.close();
       socket.off('offer');
       socket.off('candidate');
