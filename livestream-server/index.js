@@ -18,7 +18,7 @@ const io = socketIo(server, {
 const PORT = process.env.PORT || 4000;
 
 // Lưu thông tin broadcaster và người dùng
-const broadcasters = {};  // { socketId: { id, livestreamName, userName, viewersCount } }
+const broadcasters = {};  // { socketId: { id, livestreamName, userName, viewersCount, viewersList } }
 const users = {};  // { socketId: userName }
 
 app.use(cors({
@@ -57,6 +57,7 @@ io.on('connection', socket => {
       livestreamName: data.livestreamName || `Livestream ${Object.keys(broadcasters).length + 1}`,
       userName: data.userName || 'Streamer',
       viewersCount: 0, // Mới tạo, chưa có người xem
+      viewersList: [], // Danh sách người xem (ID)
     };
 
     users[socket.id] = data.userName || 'Streamer';
@@ -72,7 +73,11 @@ io.on('connection', socket => {
   // Viewer muốn xem broadcaster nào (gửi broadcasterId)
   socket.on('watcher', (broadcasterId) => {
     if (broadcasters[broadcasterId]) {
-      broadcasters[broadcasterId].viewersCount++; // Tăng số lượng người xem
+      // Nếu người xem chưa có trong danh sách viewers, thêm vào
+      if (!broadcasters[broadcasterId].viewersList.includes(socket.id)) {
+        broadcasters[broadcasterId].viewersList.push(socket.id);
+        broadcasters[broadcasterId].viewersCount++; // Tăng số lượng người xem
+      }
       socket.to(broadcasterId).emit('watcher', socket.id); // Gửi thông báo tới broadcaster
       io.emit('broadcastersList', Object.values(broadcasters)); // Cập nhật lại danh sách broadcaster
     }
@@ -93,14 +98,19 @@ io.on('connection', socket => {
 
   // Khi ngắt kết nối
   socket.on('disconnect', () => {
-    // Giảm số lượng người xem khi người dùng rời đi
+    // Kiểm tra các broadcaster có socketId của người dùng không
     Object.keys(broadcasters).forEach(broadcasterId => {
-      if (broadcasters[broadcasterId]) {
-        broadcasters[broadcasterId].viewersCount--;
+      const broadcaster = broadcasters[broadcasterId];
+      const viewerIndex = broadcaster.viewersList.indexOf(socket.id);
+
+      if (viewerIndex !== -1) {
+        // Xóa người xem khỏi danh sách viewers
+        broadcaster.viewersList.splice(viewerIndex, 1);
+        broadcaster.viewersCount--; // Giảm số người xem
+
+        io.emit('broadcastersList', Object.values(broadcasters)); // Cập nhật danh sách broadcaster
       }
     });
-
-    io.emit('broadcastersList', Object.values(broadcasters)); // Cập nhật danh sách livestreams
 
     delete users[socket.id];
 

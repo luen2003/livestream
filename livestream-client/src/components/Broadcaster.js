@@ -9,7 +9,7 @@ export default function Broadcaster() {
   const [userName, setUserName] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState('');
-  const [viewersCount, setViewersCount] = useState(0);  // Thêm trạng thái số người xem
+  const [viewersCount, setViewersCount] = useState(0);  // Trạng thái số người xem
 
   useEffect(() => {
     if (!isStreaming) return;
@@ -57,8 +57,16 @@ export default function Broadcaster() {
           console.error('Error creating or sending offer:', err);
         }
 
-        // Tăng số lượng người xem khi có người xem mới
-        setViewersCount(prevCount => prevCount + 1);
+        // Cập nhật số người xem
+        socket.emit('getBroadcastersList');
+      });
+
+      // Lắng nghe sự thay đổi số lượng người xem
+      socket.on('broadcastersList', (broadcasters) => {
+        const broadcaster = broadcasters.find(b => b.id === socket.id);
+        if (broadcaster) {
+          setViewersCount(broadcaster.viewersCount);
+        }
       });
     });
 
@@ -66,7 +74,7 @@ export default function Broadcaster() {
       socket.off('watcher');
       socket.off('answer');
       socket.off('candidate');
-      socket.off('disconnectPeer');
+      socket.off('broadcastersList');
 
       Object.values(peerConnections.current).forEach(pc => pc.close());
       peerConnections.current = {};
