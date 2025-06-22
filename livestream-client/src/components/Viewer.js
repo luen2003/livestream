@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { socket } from '../socket';
+import { socket } from '../socket';  // Chắc chắn bạn có socket instance từ trước
 
 export default function Viewer({ broadcasterId }) {
   const remoteVideo = useRef(null);
@@ -22,7 +22,7 @@ export default function Viewer({ broadcasterId }) {
       return;
     }
     setIsViewing(true);
-    socket.emit('watcher', broadcasterId);
+    socket.emit('watcher', broadcasterId);  // Gửi broadcasterId cho server
   };
 
   // Kết nối WebRTC và lắng nghe các tín hiệu
@@ -53,6 +53,7 @@ export default function Viewer({ broadcasterId }) {
       if (id !== broadcasterId) return; // Kiểm tra ID broadcaster
 
       try {
+        console.log("Received offer from broadcaster, setting remote description");
         await peerConnection.setRemoteDescription(new RTCSessionDescription(description));
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);

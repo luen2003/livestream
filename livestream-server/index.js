@@ -85,15 +85,15 @@ io.on('connection', socket => {
 
   // WebRTC signaling
   socket.on('offer', (id, message) => {
-    socket.to(id).emit('offer', socket.id, message);
+    socket.to(id).emit('offer', socket.id, message);  // Gửi offer từ broadcaster đến viewer
   });
 
   socket.on('answer', (id, message) => {
-    socket.to(id).emit('answer', socket.id, message);
+    socket.to(id).emit('answer', socket.id, message);  // Gửi answer từ viewer đến broadcaster
   });
 
   socket.on('candidate', (id, message) => {
-    socket.to(id).emit('candidate', socket.id, message);
+    socket.to(id).emit('candidate', socket.id, message);  // Gửi ICE candidate từ viewer đến broadcaster
   });
 
   // Khi ngắt kết nối
