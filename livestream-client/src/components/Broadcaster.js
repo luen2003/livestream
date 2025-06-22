@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { socket } from '../socket';
+import Chat from './Chat';  // Import Chat component
 
 export default function Broadcaster() {
   const localVideo = useRef();
@@ -148,6 +149,7 @@ export default function Broadcaster() {
             playsInline
             style={{ width: '100%', backgroundColor: '#000' }}
           />
+          <Chat /> {/* Add the Chat component here */}
         </div>
       )}
     </div>

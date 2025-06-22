@@ -97,6 +97,12 @@ io.on('connection', socket => {
     socket.to(id).emit('candidate', socket.id, message);
   });
 
+  socket.on('chat-message', (message) => {
+  const userName = users[socket.id] || 'Unknown';
+  // Phát tin nhắn đến tất cả client
+  io.emit('chat-message', { id: socket.id, userName, message });
+});
+
   // Khi ngắt kết nối
   socket.on('disconnect', () => {
     delete users[socket.id];

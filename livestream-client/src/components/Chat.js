@@ -7,9 +7,9 @@ export default function Chat() {
 
   useEffect(() => {
     socket.on('chat-message', ({ id, userName, message }) => {
-      // Thêm chat vào state
       setChats(prev => [...prev, { id, userName, message }]);
     });
+
     return () => socket.off('chat-message');
   }, []);
 
@@ -17,7 +17,7 @@ export default function Chat() {
     e.preventDefault();
     if (msg.trim()) {
       socket.emit('chat-message', msg);
-      setMsg(''); // reset input field after send
+      setMsg('');
     }
   };
 

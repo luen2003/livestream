@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { socket } from '../socket';
+import Chat from './Chat';  // Import Chat component
 
 export default function Viewer({ broadcasterId }) {
   const remoteVideo = useRef(null);  // Khai báo ref cho video
@@ -99,6 +100,7 @@ export default function Viewer({ broadcasterId }) {
         controls={false}
         style={{ width: '100%', backgroundColor: '#000' }}
       />
+      <Chat /> {/* Add the Chat component here */}
     </div>
   );
 }

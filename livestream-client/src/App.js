@@ -18,7 +18,6 @@ function App() {
       {role === 'broadcaster' && <Broadcaster />}
       {role === 'viewer' && <LiveStreamList />}
 
-      {role && <Chat />}
     </div>
   );
 }
