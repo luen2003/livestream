@@ -9,24 +9,22 @@ const server = http.createServer(app);
 
 const io = socketIo(server, {
   cors: {
-   // origin: "http://localhost:3000",  // URL của client
-    origin: "https://react-livestream-app.onrender.com/",  // URL của client
+    origin: "https://react-livestream-app.onrender.com",  // URL của client
     methods: ["GET", "POST"],
-    credentials: true
-  }
+    credentials: true,
+  },
 });
 
 const PORT = process.env.PORT || 4000;
 
-const broadcasters = {};  // Lưu thông tin của broadcaster { socketId: {id, livestreamName, userName} }
-const users = {};  // Lưu userName theo socketId (bao gồm cả broadcaster và viewer)
+// Lưu thông tin broadcaster và người dùng
+const broadcasters = {};  // { socketId: { id, livestreamName, userName, viewersCount } }
+const users = {};  // { socketId: userName }
 
-// Middleware
 app.use(cors({
-  //origin: "http://localhost:3000",  // URL của client
-  origin: "https://react-livestream-app.onrender.com/",  // URL của client
+  origin: "https://react-livestream-app.onrender.com",  // URL của client
   methods: ["GET", "POST"],
-  credentials: true
+  credentials: true,
 }));
 
 const __dirnamePath = path.resolve();
@@ -49,7 +47,7 @@ io.on('connection', socket => {
 
   // Client gửi tên user lên server (cả broadcaster hoặc viewer)
   socket.on('setUserName', (userName) => {
-    users[socket.id] = userName || 'Unknown';  // Lưu tên người dùng vào users
+    users[socket.id] = userName || 'Unknown';
   });
 
   // Broadcaster đăng ký livestream, gửi streamName + userName
@@ -57,12 +55,13 @@ io.on('connection', socket => {
     broadcasters[socket.id] = {
       id: socket.id,
       livestreamName: data.livestreamName || `Livestream ${Object.keys(broadcasters).length + 1}`,
-      userName: data.userName || 'Streamer'
+      userName: data.userName || 'Streamer',
+      viewersCount: 0, // Mới tạo, chưa có người xem
     };
 
     users[socket.id] = data.userName || 'Streamer';
 
-    io.emit('broadcastersList', Object.values(broadcasters));
+    io.emit('broadcastersList', Object.values(broadcasters)); // Cập nhật danh sách livestreams
   });
 
   // Viewer yêu cầu danh sách livestream
@@ -73,7 +72,9 @@ io.on('connection', socket => {
   // Viewer muốn xem broadcaster nào (gửi broadcasterId)
   socket.on('watcher', (broadcasterId) => {
     if (broadcasters[broadcasterId]) {
-      socket.to(broadcasterId).emit('watcher', socket.id);
+      broadcasters[broadcasterId].viewersCount++; // Tăng số lượng người xem
+      socket.to(broadcasterId).emit('watcher', socket.id); // Gửi thông báo tới broadcaster
+      io.emit('broadcastersList', Object.values(broadcasters)); // Cập nhật lại danh sách broadcaster
     }
   });
 
@@ -90,14 +91,17 @@ io.on('connection', socket => {
     socket.to(id).emit('candidate', socket.id, message);
   });
 
-  // Chat message broadcast, kèm tên userName
-  socket.on('chat-message', (message) => {
-    const userName = users[socket.id] || 'Unknown';  // Lấy tên người dùng từ `users`
-    io.emit('chat-message', { id: socket.id, userName, message });
-  });
-
   // Khi ngắt kết nối
   socket.on('disconnect', () => {
+    // Giảm số lượng người xem khi người dùng rời đi
+    Object.keys(broadcasters).forEach(broadcasterId => {
+      if (broadcasters[broadcasterId]) {
+        broadcasters[broadcasterId].viewersCount--;
+      }
+    });
+
+    io.emit('broadcastersList', Object.values(broadcasters)); // Cập nhật danh sách livestreams
+
     delete users[socket.id];
 
     if (broadcasters[socket.id]) {
@@ -108,7 +112,6 @@ io.on('connection', socket => {
     socket.broadcast.emit('disconnectPeer', socket.id);
   });
 });
-
 
 server.listen(PORT, () => {
   console.log(`Server is running at http://localhost:${PORT}`);

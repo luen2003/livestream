@@ -9,66 +9,68 @@ export default function Broadcaster() {
   const [userName, setUserName] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState('');
+  const [viewersCount, setViewersCount] = useState(0);  // Thêm trạng thái số người xem
 
   useEffect(() => {
     if (!isStreaming) return;
 
-    // Gửi đúng object với key livestreamName
+    // Gửi thông tin broadcaster lên server khi bắt đầu stream
     socket.emit('broadcaster', { livestreamName: streamName, userName });
 
-    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      .then(stream => {
-        localVideo.current.srcObject = stream;
-
-        socket.on('watcher', async watcherId => {
-          const pc = new RTCPeerConnection({
-            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
-          });
-
-          peerConnections.current[watcherId] = pc;
-
-          stream.getTracks().forEach(track => pc.addTrack(track, stream));
-
-          pc.onicecandidate = e => {
-            if (e.candidate) {
-              socket.emit('candidate', watcherId, e.candidate);
-            }
-          };
-
-          try {
-            const offer = await pc.createOffer();
-            await pc.setLocalDescription(offer);
-            socket.emit('offer', watcherId, pc.localDescription);
-          } catch (err) {
-            console.error('Error creating or sending offer:', err);
-          }
-        });
-
-        socket.on('answer', (id, description) => {
-          const pc = peerConnections.current[id];
-          if (!pc) return;
-          pc.setRemoteDescription(new RTCSessionDescription(description)).catch(console.error);
-        });
-
-        socket.on('candidate', (id, candidate) => {
-          const pc = peerConnections.current[id];
-          if (pc) {
-            pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(console.error);
-          }
-        });
-
-        socket.on('disconnectPeer', id => {
-          const pc = peerConnections.current[id];
-          if (pc) {
-            pc.close();
-            delete peerConnections.current[id];
-          }
-        });
-      })
-      .catch(err => {
-        console.error('getUserMedia error:', err);
-        setError('Không thể truy cập camera và microphone');
+    // Lắng nghe khi có người xem
+    socket.on('watcher', async watcherId => {
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }]
       });
+
+      peerConnections.current[watcherId] = pc;
+
+      localVideo.current.srcObject.getTracks().forEach(track => pc.addTrack(track, localVideo.current.srcObject));
+
+      pc.onicecandidate = e => {
+        if (e.candidate) {
+          socket.emit('candidate', watcherId, e.candidate);
+        }
+      };
+
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.emit('offer', watcherId, pc.localDescription);
+      } catch (err) {
+        console.error('Error creating or sending offer:', err);
+      }
+
+      // Tăng số lượng người xem khi có người xem mới
+      setViewersCount(prevCount => prevCount + 1);
+    });
+
+    // Lắng nghe câu trả lời từ người xem
+    socket.on('answer', (id, description) => {
+      const pc = peerConnections.current[id];
+      if (!pc) return;
+      pc.setRemoteDescription(new RTCSessionDescription(description)).catch(console.error);
+    });
+
+    // Lắng nghe candidate ICE từ người xem
+    socket.on('candidate', (id, candidate) => {
+      const pc = peerConnections.current[id];
+      if (pc) {
+        pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(console.error);
+      }
+    });
+
+    // Xử lý khi người xem ngắt kết nối
+    socket.on('disconnectPeer', id => {
+      const pc = peerConnections.current[id];
+      if (pc) {
+        pc.close();
+        delete peerConnections.current[id];
+      }
+
+      // Giảm số lượng người xem khi người xem ngắt kết nối
+      setViewersCount(prevCount => prevCount - 1);
+    });
 
     return () => {
       socket.off('watcher');
@@ -135,6 +137,9 @@ export default function Broadcaster() {
         <div>
           <div style={{ marginBottom: 10 }}>
             <strong>{`Livestream: ${streamName} - Người dùng: ${userName}`}</strong>
+          </div>
+          <div style={{ marginBottom: 10 }}>
+            <span>{`Số người xem: ${viewersCount}`}</span> {/* Hiển thị số người xem */}
           </div>
           <video
             ref={localVideo}
