@@ -8,7 +8,8 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: "http://localhost:3000",
+    //origin: "http://localhost:3000",
+    origin: "https://react-livestream-app.onrender.com/",
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -21,7 +22,8 @@ const viewers = {}; // { broadcasterId: [ viewerSocketId, ... ] }
 const users = {}; // { socketId: userName }
 
 app.use(cors({
-  origin: "http://localhost:3000",
+    //origin: "http://localhost:3000",
+    origin: "https://react-livestream-app.onrender.com/",
   methods: ["GET", "POST"],
   credentials: true
 }));
