@@ -7,6 +7,7 @@ export default function Viewer({ broadcasterId }) {
   const [userName, setUserName] = useState('');
   const [isViewing, setIsViewing] = useState(false);
   const [error, setError] = useState('');
+  const [viewerCount, setViewerCount] = useState(0); // 👉 Thêm state viewerCount
 
   useEffect(() => {
     if (userName.trim()) {
@@ -61,10 +62,16 @@ export default function Viewer({ broadcasterId }) {
       peerConnection.addIceCandidate(new RTCIceCandidate(candidate)); // Thêm ICE candidate
     });
 
+    // 👉 Nhận viewerCount từ server
+    socket.on('viewerCount', (count) => {
+      setViewerCount(count);
+    });
+
     return () => {
       peerConnection.close();
       socket.off('offer');
       socket.off('candidate');
+      socket.off('viewerCount');
     };
   }, [isViewing, broadcasterId]);
 
@@ -93,6 +100,9 @@ export default function Viewer({ broadcasterId }) {
 
   return (
     <div>
+      <div style={{ marginBottom: 10 }}>
+        <strong>Số người xem hiện tại: {viewerCount}</strong>
+      </div>
       <video
         ref={remoteVideo}
         autoPlay
@@ -100,7 +110,7 @@ export default function Viewer({ broadcasterId }) {
         controls={false}
         style={{ width: '100%', backgroundColor: '#000' }}
       />
-      <Chat /> {/* Add the Chat component here */}
+      <Chat />
     </div>
   );
 }

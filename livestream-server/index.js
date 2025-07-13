@@ -8,7 +8,7 @@ const app = express();
 const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
-    origin: "https://react-livestream-app.onrender.com/",  
+    origin: "http://localhost:3000",
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -16,13 +16,12 @@ const io = socketIo(server, {
 
 const PORT = process.env.PORT || 4000;
 
-const broadcasters = {};  // Lưu thông tin của broadcaster { socketId: {id, livestreamName, userName} }
-const viewers = {};  // Lưu danh sách người xem theo broadcasterId
-const users = {};  // Lưu userName theo socketId (bao gồm cả broadcaster và viewer)
+const broadcasters = {}; // { socketId: { id, livestreamName, userName } }
+const viewers = {}; // { broadcasterId: [ viewerSocketId, ... ] }
+const users = {}; // { socketId: userName }
 
-// Middleware
 app.use(cors({
-  origin: "https://react-livestream-app.onrender.com/",
+  origin: "http://localhost:3000",
   methods: ["GET", "POST"],
   credentials: true
 }));
@@ -42,46 +41,50 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-io.on('connection', socket => {
+io.on('connection', (socket) => {
   console.log('New connection:', socket.id);
 
-  // Client gửi tên user lên server (cả broadcaster hoặc viewer)
   socket.on('setUserName', (userName) => {
-    users[socket.id] = userName || 'Unknown';  // Lưu tên người dùng vào users
+    users[socket.id] = userName || 'Unknown';
   });
 
-  // Broadcaster đăng ký livestream, gửi streamName + userName
   socket.on('broadcaster', (data) => {
     broadcasters[socket.id] = {
       id: socket.id,
       livestreamName: data.livestreamName || `Livestream ${Object.keys(broadcasters).length + 1}`,
       userName: data.userName || 'Streamer'
     };
-
     users[socket.id] = data.userName || 'Streamer';
 
     io.emit('broadcastersList', Object.values(broadcasters));
   });
 
-  // Viewer yêu cầu danh sách livestream
   socket.on('getBroadcastersList', () => {
     socket.emit('broadcastersList', Object.values(broadcasters));
   });
 
-  // Viewer muốn xem broadcaster nào (gửi broadcasterId)
   socket.on('watcher', (broadcasterId) => {
-    if (broadcasters[broadcasterId]) {
-      socket.to(broadcasterId).emit('watcher', socket.id);
+    if (!broadcasters[broadcasterId]) return;
 
-      // Thêm viewer vào danh sách của broadcaster
-      if (!viewers[broadcasterId]) {
-        viewers[broadcasterId] = [];
-      }
-      viewers[broadcasterId].push(socket.id);
+    socket.to(broadcasterId).emit('watcher', socket.id);
 
-      // Cập nhật số người xem cho broadcaster
-      io.to(broadcasterId).emit('viewerCount', viewers[broadcasterId].length);
+    if (!viewers[broadcasterId]) {
+      viewers[broadcasterId] = [];
     }
+
+    if (!viewers[broadcasterId].includes(socket.id)) {
+      viewers[broadcasterId].push(socket.id);
+    }
+
+    const count = viewers[broadcasterId].length;
+
+    // Gửi viewerCount cho broadcaster
+    io.to(broadcasterId).emit('viewerCount', count);
+
+    // Gửi viewerCount cho tất cả viewer đang xem stream đó
+    viewers[broadcasterId].forEach((viewerId) => {
+      io.to(viewerId).emit('viewerCount', count);
+    });
   });
 
   // WebRTC signaling
@@ -98,37 +101,44 @@ io.on('connection', socket => {
   });
 
   socket.on('chat-message', (message) => {
-  const userName = users[socket.id] || 'Unknown';
-  // Phát tin nhắn đến tất cả client
-  io.emit('chat-message', { id: socket.id, userName, message });
-});
+    const userName = users[socket.id] || 'Unknown';
+    io.emit('chat-message', { id: socket.id, userName, message });
+  });
 
-  // Khi ngắt kết nối
   socket.on('disconnect', () => {
     delete users[socket.id];
 
+    // Nếu là broadcaster
     if (broadcasters[socket.id]) {
-      // Xóa broadcaster khi ngắt kết nối
       delete broadcasters[socket.id];
       io.emit('broadcastersList', Object.values(broadcasters));
 
-      // Xóa viewer khỏi danh sách khi broadcaster ngắt kết nối
-      for (const broadcasterId in viewers) {
-        const index = viewers[broadcasterId].indexOf(socket.id);
-        if (index !== -1) {
-          viewers[broadcasterId].splice(index, 1);
-          io.to(broadcasterId).emit('viewerCount', viewers[broadcasterId].length);
-          break;
-        }
-      }
+      // Gỡ tất cả viewer của broadcaster này
+      const viewerList = viewers[socket.id] || [];
+      delete viewers[socket.id];
+
+      // Gửi viewerCount = 0 cho viewer và broadcaster (đã ngắt)
+      viewerList.forEach((viewerId) => {
+        io.to(viewerId).emit('viewerCount', 0);
+      });
     }
 
-    // Xóa viewer khỏi danh sách khi viewer ngắt kết nối
+    // Nếu là viewer
     for (const broadcasterId in viewers) {
-      const index = viewers[broadcasterId].indexOf(socket.id);
-      if (index !== -1) {
-        viewers[broadcasterId].splice(index, 1);
-        io.to(broadcasterId).emit('viewerCount', viewers[broadcasterId].length);
+      const viewerIndex = viewers[broadcasterId].indexOf(socket.id);
+      if (viewerIndex !== -1) {
+        viewers[broadcasterId].splice(viewerIndex, 1);
+
+        const count = viewers[broadcasterId].length;
+
+        // Gửi viewerCount cho broadcaster
+        io.to(broadcasterId).emit('viewerCount', count);
+
+        // Gửi viewerCount cho tất cả viewer còn lại
+        viewers[broadcasterId].forEach((viewerId) => {
+          io.to(viewerId).emit('viewerCount', count);
+        });
+
         break;
       }
     }
