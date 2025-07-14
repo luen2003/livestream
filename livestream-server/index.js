@@ -11,7 +11,6 @@ const io = socketIo(server, {
     //origin: "http://localhost:3000",
     origin: "https://react-livestream-app.onrender.com/",
     methods: ["GET", "POST"],
-    credentials: true
   }
 });
 
@@ -24,8 +23,7 @@ const users = {}; // { socketId: userName }
 app.use(cors({
     //origin: "http://localhost:3000",
     origin: "https://react-livestream-app.onrender.com/",
-  methods: ["GET", "POST"],
-  credentials: true
+    methods: ["GET", "POST"],
 }));
 
 const __dirnamePath = path.resolve();
