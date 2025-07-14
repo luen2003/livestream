@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { socket } from '../socket';
-import Chat from './Chat';  // Import Chat component
+import Chat from './Chat';
 
 export default function Viewer({ broadcasterId }) {
-  const remoteVideo = useRef(null);  // Khai báo ref cho video
+  const remoteVideo = useRef(null);
   const [userName, setUserName] = useState('');
   const [isViewing, setIsViewing] = useState(false);
   const [error, setError] = useState('');
-  const [viewerCount, setViewerCount] = useState(0); // 👉 Thêm state viewerCount
+  const [viewerCount, setViewerCount] = useState(0);
 
   useEffect(() => {
     if (userName.trim()) {
-      socket.emit('setUserName', userName);  // Gửi tên người dùng lên server
+      socket.emit('setUserName', userName);
     }
   }, [userName]);
 
@@ -22,25 +22,44 @@ export default function Viewer({ broadcasterId }) {
       return;
     }
     setIsViewing(true);
-    socket.emit('watcher', broadcasterId); // Yêu cầu xem livestream từ broadcaster
+    socket.emit('watcher', broadcasterId);
   };
 
   useEffect(() => {
     if (!isViewing || !broadcasterId) return;
 
     const peerConnection = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+      iceServers: [
+        {
+          urls: ['stun:hk-turn1.xirsys.com']
+        },
+        {
+          username: 'aX_0HogGPHRGNvdzUm4KbELKRKa2e1-XXU7ykTjLzxPvYGtToLCCxE85kSodQr4uAAAAAGh001hkbHVvbmd0YQ==',
+          credential: '3e8fc950-6098-11f0-9c7a-0242ac120004',
+          urls: [
+            'turn:hk-turn1.xirsys.com:80?transport=udp',
+            'turn:hk-turn1.xirsys.com:3478?transport=udp',
+            'turn:hk-turn1.xirsys.com:80?transport=tcp',
+            'turn:hk-turn1.xirsys.com:3478?transport=tcp',
+            'turns:hk-turn1.xirsys.com:443?transport=tcp',
+            'turns:hk-turn1.xirsys.com:5349?transport=tcp'
+          ]
+        },
+        {
+          urls: 'stun:stun.l.google.com:19302'
+        }
+      ]
     });
 
     peerConnection.ontrack = (event) => {
       if (remoteVideo.current) {
-        remoteVideo.current.srcObject = event.streams[0]; // Phát video livestream
+        remoteVideo.current.srcObject = event.streams[0];
       }
     };
 
     peerConnection.onicecandidate = (event) => {
       if (event.candidate) {
-        socket.emit('candidate', broadcasterId, event.candidate); // Gửi ICE candidate
+        socket.emit('candidate', broadcasterId, event.candidate);
       }
     };
 
@@ -51,7 +70,7 @@ export default function Viewer({ broadcasterId }) {
         await peerConnection.setRemoteDescription(new RTCSessionDescription(description));
         const answer = await peerConnection.createAnswer();
         await peerConnection.setLocalDescription(answer);
-        socket.emit('answer', broadcasterId, answer);  // Gửi answer tới broadcaster
+        socket.emit('answer', broadcasterId, answer);
       } catch (error) {
         console.error('Error handling offer:', error);
       }
@@ -59,10 +78,9 @@ export default function Viewer({ broadcasterId }) {
 
     socket.on('candidate', (id, candidate) => {
       if (id !== broadcasterId) return;
-      peerConnection.addIceCandidate(new RTCIceCandidate(candidate)); // Thêm ICE candidate
+      peerConnection.addIceCandidate(new RTCIceCandidate(candidate)).catch(console.error);
     });
 
-    // 👉 Nhận viewerCount từ server
     socket.on('viewerCount', (count) => {
       setViewerCount(count);
     });
