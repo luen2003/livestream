@@ -1,52 +1,113 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { socket } from '../socket';
 
-export default function Chat() {
+export default function Chat({ broadcasterId }) {
   const [msg, setMsg] = useState('');
   const [chats, setChats] = useState([]);
+  const chatBoxRef = useRef(null);
 
   useEffect(() => {
-    socket.on('chat-message', ({ id, userName, message }) => {
-      setChats(prev => [...prev, { id, userName, message }]);
-    });
+    const handleMessage = ({ id, userName, message, broadcasterId: incomingId }) => {
+      if (incomingId === broadcasterId) {
+        setChats(prev => [...prev, { id, userName, message }]);
+      }
+    };
 
-    return () => socket.off('chat-message');
-  }, []);
+    socket.on('chat-message', handleMessage);
+    return () => socket.off('chat-message', handleMessage);
+  }, [broadcasterId]);
 
-  const sendMsg = e => {
+  useEffect(() => {
+    if (chatBoxRef.current) {
+      chatBoxRef.current.scrollTop = chatBoxRef.current.scrollHeight;
+    }
+  }, [chats]);
+
+  const sendMsg = (e) => {
     e.preventDefault();
     if (msg.trim()) {
-      socket.emit('chat-message', msg);
+      socket.emit('chat-message', { broadcasterId, message: msg });
       setMsg('');
     }
   };
 
   return (
-    <div style={{ marginTop: 20 }}>
-      <div
-        style={{
-          height: 200,
-          overflowY: 'auto',
-          border: '1px solid #ccc',
-          padding: 10,
-        }}
-      >
+    <div style={styles.container}>
+      <h4 style={styles.chatTitle}>Chat Livestream</h4>
+      <div ref={chatBoxRef} style={styles.chatBox}>
         {chats.map((c, i) => (
-          <div key={i}>
-            <strong>{c.userName || "Unknown"}</strong>: {c.message}
+          <div key={i} style={styles.message}>
+            <span style={styles.userName}>{c.userName || 'Người xem'}:</span>
+            <span style={styles.text}> {c.message}</span>
           </div>
         ))}
       </div>
-      <form onSubmit={sendMsg} style={{ marginTop: 10 }}>
+
+      <form onSubmit={sendMsg} style={styles.form}>
         <input
           type="text"
           value={msg}
           onChange={e => setMsg(e.target.value)}
-          style={{ width: '80%' }}
-          placeholder="Type a message..."
+          placeholder="Nhập tin nhắn..."
+          style={styles.input}
         />
-        <button type="submit">Send</button>
+        <button type="submit" style={styles.sendButton}>Gửi</button>
       </form>
     </div>
   );
 }
+
+const styles = {
+  container: {
+    marginTop: 30,
+    width: '100%',
+    textAlign: 'left',
+  },
+  chatTitle: {
+    fontSize: 18,
+    marginBottom: 10,
+    fontWeight: 'bold',
+  },
+  chatBox: {
+    height: 250,
+    width: '100%',
+    border: '1px solid #ccc',
+    borderRadius: 6,
+    overflowY: 'auto',
+    backgroundColor: '#fafafa',
+  },
+  message: {
+    marginBottom: 8,
+    marginLeft: 8,
+  },
+  userName: {
+    fontWeight: 'bold',
+    color: '#000',
+  },
+  text: {
+    marginLeft: 4,
+    wordBreak: 'break-word',
+  },
+  form: {
+    display: 'flex',
+    marginTop: 10,
+    width: '100%',
+    gap: 8,
+  },
+  input: {
+    flex: 1,
+    padding: '8px 12px',
+    fontSize: 14,
+    border: '1px solid #ccc',
+    boxSizing: 'border-box',
+  },
+  sendButton: {
+    padding: '8px 16px',
+    backgroundColor: '#1976d2',
+    color: 'white',
+    border: 'none',
+    fontSize: 14,
+    cursor: 'pointer',
+    minWidth: 70,
+  },
+};

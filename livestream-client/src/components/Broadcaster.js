@@ -12,9 +12,9 @@ export default function Broadcaster() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState('');
   const [viewerCount, setViewerCount] = useState(0);
-  const [videoSource, setVideoSource] = useState('camera'); // camera | screen
+  const [videoSource, setVideoSource] = useState('camera');
+  const [broadcasterId, setBroadcasterId] = useState('');
 
-  // Function để lấy stream theo loại
   const getMediaStream = async (source) => {
     try {
       const stream =
@@ -22,7 +22,6 @@ export default function Broadcaster() {
           ? await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
           : await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
 
-      // Nếu có stream hiện tại, dừng lại
       if (currentStream.current) {
         currentStream.current.getTracks().forEach((track) => track.stop());
       }
@@ -30,16 +29,14 @@ export default function Broadcaster() {
       currentStream.current = stream;
       localVideo.current.srcObject = stream;
 
-      // Gửi stream mới cho các viewer đã kết nối
       Object.values(peerConnections.current).forEach((pc) => {
         pc.getSenders().forEach((sender) => {
-          const trackKind = sender.track?.kind;
-          const newTrack = stream.getTracks().find((t) => t.kind === trackKind);
+          const kind = sender.track?.kind;
+          const newTrack = stream.getTracks().find((t) => t.kind === kind);
           if (newTrack) sender.replaceTrack(newTrack);
         });
       });
 
-      // Nếu là chia sẻ màn hình, xử lý khi người dùng dừng chia sẻ thủ công
       const screenTrack = stream.getVideoTracks()[0];
       if (source === 'screen' && screenTrack) {
         screenTrack.onended = () => {
@@ -47,14 +44,12 @@ export default function Broadcaster() {
           switchStream('camera');
         };
       }
-
     } catch (err) {
       console.error('Error getting media stream:', err);
       setError('Không thể truy cập nguồn video');
     }
   };
 
-  // Hàm chuyển đổi stream giữa camera và screen
   const switchStream = async (source) => {
     setVideoSource(source);
     await getMediaStream(source);
@@ -64,33 +59,29 @@ export default function Broadcaster() {
     if (!isStreaming) return;
 
     socket.emit('broadcaster', { livestreamName: streamName, userName });
+    setBroadcasterId(socket.id); // Lưu socket.id của broadcaster
+
     getMediaStream(videoSource);
 
     socket.on('watcher', async (watcherId) => {
       const pc = new RTCPeerConnection({
-      iceServers: [
-        {
-          urls: ['stun:hk-turn1.xirsys.com']
-        },
-        {
-          username: 'aX_0HogGPHRGNvdzUm4KbELKRKa2e1-XXU7ykTjLzxPvYGtToLCCxE85kSodQr4uAAAAAGh001hkbHVvbmd0YQ==',
-          credential: '3e8fc950-6098-11f0-9c7a-0242ac120004',
-          urls: [
-            'turn:hk-turn1.xirsys.com:80?transport=udp',
-            'turn:hk-turn1.xirsys.com:3478?transport=udp',
-            'turn:hk-turn1.xirsys.com:80?transport=tcp',
-            'turn:hk-turn1.xirsys.com:3478?transport=tcp',
-            'turns:hk-turn1.xirsys.com:443?transport=tcp',
-            'turns:hk-turn1.xirsys.com:5349?transport=tcp'
-          ]
-        },
-        {
-          urls: 'stun:stun.l.google.com:19302'
-        }
-      ]
-});
-
-
+        iceServers: [
+          { urls: ['stun:hk-turn1.xirsys.com'] },
+          {
+            username: 'aX_0HogGPHRGNvdzUm4KbELKRKa2e1-XXU7ykTjLzxPvYGtToLCCxE85kSodQr4uAAAAAGh001hkbHVvbmd0YQ==',
+            credential: '3e8fc950-6098-11f0-9c7a-0242ac120004',
+            urls: [
+              'turn:hk-turn1.xirsys.com:80?transport=udp',
+              'turn:hk-turn1.xirsys.com:3478?transport=udp',
+              'turn:hk-turn1.xirsys.com:80?transport=tcp',
+              'turn:hk-turn1.xirsys.com:3478?transport=tcp',
+              'turns:hk-turn1.xirsys.com:443?transport=tcp',
+              'turns:hk-turn1.xirsys.com:5349?transport=tcp'
+            ]
+          },
+          { urls: 'stun:stun.l.google.com:19302' }
+        ]
+      });
 
       peerConnections.current[watcherId] = pc;
 
@@ -246,7 +237,7 @@ export default function Broadcaster() {
             </label>
           </div>
 
-          <Chat />
+          <Chat broadcasterId={broadcasterId} />
         </div>
       )}
     </div>

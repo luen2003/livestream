@@ -100,10 +100,19 @@ io.on('connection', (socket) => {
     socket.to(id).emit('candidate', socket.id, message);
   });
 
-  socket.on('chat-message', (message) => {
-    const userName = users[socket.id] || 'Unknown';
-    io.emit('chat-message', { id: socket.id, userName, message });
+  socket.on('chat-message', ({ broadcasterId, message }) => {
+  const userName = users[socket.id] || 'Unknown';
+  const viewersInStream = viewers[broadcasterId] || [];
+  [...viewersInStream, broadcasterId].forEach(id => {
+    io.to(id).emit('chat-message', {
+      id: socket.id,
+      userName,
+      message,
+      broadcasterId
+    });
   });
+});
+
 
   socket.on('disconnect', () => {
     delete users[socket.id];

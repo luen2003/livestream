@@ -128,7 +128,7 @@ export default function Viewer({ broadcasterId }) {
         controls={false}
         style={{ width: '100%', backgroundColor: '#000' }}
       />
-      <Chat />
+      <Chat broadcasterId={broadcasterId} />
     </div>
-  );
+  )
 }
