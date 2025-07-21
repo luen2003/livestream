@@ -54,7 +54,16 @@ export default function LiveStreamList() {
           <Viewer broadcasterId={selectedBroadcasterId} />
 
           <button
-            onClick={() => setSelectedBroadcasterId(null)}
+            onClick={() => {
+              setSelectedBroadcasterId(null);
+              socket.disconnect();
+              setSelectedBroadcasterId(null);
+              setTimeout(() => {
+                socket.connect(); 
+                socket.emit('getBroadcastersList');   
+              }, 500);
+            }}
+
             style={styles.exitButton}
           >
             Thoát Livestream
