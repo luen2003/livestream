@@ -15,6 +15,9 @@ export default function Broadcaster() {
   const [videoSource, setVideoSource] = useState('camera');
   const [broadcasterId, setBroadcasterId] = useState('');
 
+  const [videoEnabled, setVideoEnabled] = useState(true); // NEW
+  const [audioEnabled, setAudioEnabled] = useState(true); // OPTIONAL
+
   const getMediaStream = async (source) => {
     try {
       const stream =
@@ -28,6 +31,9 @@ export default function Broadcaster() {
 
       currentStream.current = stream;
       localVideo.current.srcObject = stream;
+
+      setVideoEnabled(true); // reset when new stream is loaded
+      setAudioEnabled(true);
 
       Object.values(peerConnections.current).forEach((pc) => {
         pc.getSenders().forEach((sender) => {
@@ -55,11 +61,31 @@ export default function Broadcaster() {
     await getMediaStream(source);
   };
 
+  const toggleVideo = () => {
+    if (!currentStream.current) return;
+    const videoTrack = currentStream.current.getVideoTracks()[0];
+    if (videoTrack) {
+      const newStatus = !videoTrack.enabled;
+      videoTrack.enabled = newStatus;
+      setVideoEnabled(newStatus);
+    }
+  };
+
+  const toggleAudio = () => {
+    if (!currentStream.current) return;
+    const audioTrack = currentStream.current.getAudioTracks()[0];
+    if (audioTrack) {
+      const newStatus = !audioTrack.enabled;
+      audioTrack.enabled = newStatus;
+      setAudioEnabled(newStatus);
+    }
+  };
+
   useEffect(() => {
     if (!isStreaming) return;
 
     socket.emit('broadcaster', { livestreamName: streamName, userName });
-    setBroadcasterId(socket.id); // Lưu socket.id của broadcaster
+    setBroadcasterId(socket.id);
 
     getMediaStream(videoSource);
 
@@ -235,6 +261,16 @@ export default function Broadcaster() {
                 <option value="screen">Chia sẻ màn hình</option>
               </select>
             </label>
+          </div>
+
+          <div style={{ marginBottom: 10 }}>
+            <button onClick={toggleVideo} style={{ marginRight: 10, padding: '8px 16px' }}>
+              {videoEnabled ? 'Tắt Camera/Màn hình' : 'Bật lại Camera/Màn hình'}
+            </button>
+
+            <button onClick={toggleAudio} style={{ padding: '8px 16px' }}>
+              {audioEnabled ? 'Tắt Mic' : 'Bật Mic'}
+            </button>
           </div>
 
           <Chat broadcasterId={broadcasterId} />
