@@ -22,7 +22,7 @@ const users = {}; // { socketId: userName }
 
 app.use(cors({
     //origin: "http://localhost:3000",
-    origin: "https://react-livestream-app.onrender.com/",
+    origin: "http://localhost:3000",
     methods: ["GET", "POST"],
 }));
 
@@ -46,6 +46,11 @@ io.on('connection', (socket) => {
 
   socket.on('setUserName', (userName) => {
     users[socket.id] = userName || 'Unknown';
+  });
+
+  socket.on("broadcasterModeChanged", ({ broadcasterId, mode }) => {
+    console.log(`Broadcaster ${broadcasterId} đổi chế độ: ${mode}`);
+    socket.broadcast.emit("broadcasterModeChanged", { broadcasterId, mode });
   });
 
   socket.on('broadcaster', (data) => {
@@ -98,6 +103,10 @@ io.on('connection', (socket) => {
 
   socket.on('candidate', (id, message) => {
     socket.to(id).emit('candidate', socket.id, message);
+  });
+
+  socket.on('changeVideoSource', (newSource) => {
+    socket.broadcast.emit('changeVideoSource', newSource);
   });
 
   socket.on('chat-message', ({ broadcasterId, message }) => {

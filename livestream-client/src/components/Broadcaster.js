@@ -3,84 +3,82 @@ import { socket } from '../socket';
 import Chat from './Chat';
 
 export default function Broadcaster() {
-  const localVideo = useRef();
+  const localScreenVideo = useRef();
+  const localCameraVideo = useRef();
   const peerConnections = useRef({});
-  const currentStream = useRef(null);
+  const currentStreams = useRef({}); // {screen, camera}
 
   const [streamName, setStreamName] = useState('');
   const [userName, setUserName] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState('');
   const [viewerCount, setViewerCount] = useState(0);
-  const [videoSource, setVideoSource] = useState('camera');
+  const [videoSource, setVideoSource] = useState('camera'); // camera | screen | both
   const [broadcasterId, setBroadcasterId] = useState('');
 
-  const [videoEnabled, setVideoEnabled] = useState(true); // NEW
-  const [audioEnabled, setAudioEnabled] = useState(true); // OPTIONAL
+  const [videoEnabled, setVideoEnabled] = useState(true);
+  const [audioEnabled, setAudioEnabled] = useState(true);
 
+  // Get media stream based on source mode
   const getMediaStream = async (source) => {
     try {
-      const stream =
-        source === 'screen'
-          ? await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
-          : await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-
-      if (currentStream.current) {
-        currentStream.current.getTracks().forEach((track) => track.stop());
+      stopAll();
+      if (source === 'camera') {
+        const cam = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        currentStreams.current = { camera: cam };
+        localCameraVideo.current.srcObject = cam;
+      } else if (source === 'screen') {
+        const scr = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        currentStreams.current = { screen: scr };
+        localScreenVideo.current.srcObject = scr;
+      } else if (source === 'both') {
+        const scr = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        const cam = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        currentStreams.current = { screen: scr, camera: cam };
+        localScreenVideo.current.srcObject = scr;
+        localCameraVideo.current.srcObject = cam;
       }
 
-      currentStream.current = stream;
-      localVideo.current.srcObject = stream;
-
-      setVideoEnabled(true); // reset when new stream is loaded
-      setAudioEnabled(true);
-
+      // Update tracks for all peers when changing mode
       Object.values(peerConnections.current).forEach((pc) => {
-        pc.getSenders().forEach((sender) => {
-          const kind = sender.track?.kind;
-          const newTrack = stream.getTracks().find((t) => t.kind === kind);
-          if (newTrack) sender.replaceTrack(newTrack);
-        });
+        // Remove old tracks
+        pc.getSenders().forEach((sender) => pc.removeTrack(sender));
+        // Add new tracks
+        Object.values(currentStreams.current).forEach((stream) =>
+          stream.getTracks().forEach((track) => pc.addTrack(track, stream))
+        );
       });
-
-      const screenTrack = stream.getVideoTracks()[0];
-      if (source === 'screen' && screenTrack) {
-        screenTrack.onended = () => {
-          setVideoSource('camera');
-          switchStream('camera');
-        };
-      }
     } catch (err) {
-      console.error('Error getting media stream:', err);
+      console.error('Error getting media:', err);
       setError('Không thể truy cập nguồn video');
     }
   };
 
-  const switchStream = async (source) => {
-    setVideoSource(source);
-    await getMediaStream(source);
+  // Stop all old tracks
+  const stopAll = () => {
+    Object.values(currentStreams.current).forEach((stream) =>
+      stream.getTracks().forEach((track) => track.stop())
+    );
+    currentStreams.current = {};
   };
 
+  // Toggle video on/off
   const toggleVideo = () => {
-    if (!currentStream.current) return;
-    const videoTrack = currentStream.current.getVideoTracks()[0];
-    if (videoTrack) {
-      const newStatus = !videoTrack.enabled;
-      videoTrack.enabled = newStatus;
-      setVideoEnabled(newStatus);
-    }
+    Object.values(currentStreams.current).forEach((stream) => {
+      stream.getVideoTracks().forEach((track) => (track.enabled = !track.enabled));
+    });
+    setVideoEnabled((prev) => !prev);
   };
 
+  // Toggle audio on/off
   const toggleAudio = () => {
-    if (!currentStream.current) return;
-    const audioTrack = currentStream.current.getAudioTracks()[0];
-    if (audioTrack) {
-      const newStatus = !audioTrack.enabled;
-      audioTrack.enabled = newStatus;
-      setAudioEnabled(newStatus);
-    }
+    Object.values(currentStreams.current).forEach((stream) => {
+      stream.getAudioTracks().forEach((track) => (track.enabled = !track.enabled));
+    });
+    setAudioEnabled((prev) => !prev);
   };
 
+  // Start streaming and handle signaling
   useEffect(() => {
     if (!isStreaming) return;
 
@@ -94,7 +92,8 @@ export default function Broadcaster() {
         iceServers: [
           { urls: ['stun:hk-turn1.xirsys.com'] },
           {
-            username: 'aX_0HogGPHRGNvdzUm4KbELKRKa2e1-XXU7ykTjLzxPvYGtToLCCxE85kSodQr4uAAAAAGh001hkbHVvbmd0YQ==',
+            username:
+              'aX_0HogGPHRGNvdzUm4KbELKRKa2e1-XXU7ykTjLzxPvYGtToLCCxE85kSodQr4uAAAAAGh001hkbHVvbmd0YQ==',
             credential: '3e8fc950-6098-11f0-9c7a-0242ac120004',
             urls: [
               'turn:hk-turn1.xirsys.com:80?transport=udp',
@@ -102,57 +101,47 @@ export default function Broadcaster() {
               'turn:hk-turn1.xirsys.com:80?transport=tcp',
               'turn:hk-turn1.xirsys.com:3478?transport=tcp',
               'turns:hk-turn1.xirsys.com:443?transport=tcp',
-              'turns:hk-turn1.xirsys.com:5349?transport=tcp'
-            ]
+              'turns:hk-turn1.xirsys.com:5349?transport=tcp',
+            ],
           },
-          { urls: 'stun:stun.l.google.com:19302' }
-        ]
+          { urls: 'stun:stun.l.google.com:19302' },
+        ],
       });
 
       peerConnections.current[watcherId] = pc;
 
-      currentStream.current.getTracks().forEach((track) => pc.addTrack(track, currentStream.current));
+      // Add all tracks from current streams
+      Object.values(currentStreams.current).forEach((stream) =>
+        stream.getTracks().forEach((track) => pc.addTrack(track, stream))
+      );
 
       pc.onicecandidate = (e) => {
-        if (e.candidate) {
-          socket.emit('candidate', watcherId, e.candidate);
-        }
+        if (e.candidate) socket.emit('candidate', watcherId, e.candidate);
       };
 
-      try {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        socket.emit('offer', watcherId, pc.localDescription);
-      } catch (err) {
-        console.error('Error creating or sending offer:', err);
-      }
+      const offer = await pc.createOffer();
+      await pc.setLocalDescription(offer);
+      socket.emit('offer', watcherId, pc.localDescription);
     });
 
     socket.on('answer', (id, description) => {
       const pc = peerConnections.current[id];
-      if (pc) {
-        pc.setRemoteDescription(new RTCSessionDescription(description)).catch(console.error);
-      }
+      if (pc) pc.setRemoteDescription(new RTCSessionDescription(description));
     });
 
     socket.on('candidate', (id, candidate) => {
       const pc = peerConnections.current[id];
-      if (pc) {
-        pc.addIceCandidate(new RTCIceCandidate(candidate)).catch(console.error);
-      }
+      if (pc) pc.addIceCandidate(new RTCIceCandidate(candidate));
     });
 
     socket.on('disconnectPeer', (id) => {
-      const pc = peerConnections.current[id];
-      if (pc) {
-        pc.close();
+      if (peerConnections.current[id]) {
+        peerConnections.current[id].close();
         delete peerConnections.current[id];
       }
     });
 
-    socket.on('viewerCount', (count) => {
-      setViewerCount(count);
-    });
+    socket.on('viewerCount', (count) => setViewerCount(count));
 
     return () => {
       socket.off('watcher');
@@ -160,27 +149,18 @@ export default function Broadcaster() {
       socket.off('candidate');
       socket.off('disconnectPeer');
       socket.off('viewerCount');
-
       Object.values(peerConnections.current).forEach((pc) => pc.close());
       peerConnections.current = {};
-
-      if (currentStream.current) {
-        currentStream.current.getTracks().forEach((track) => track.stop());
-        currentStream.current = null;
-      }
+      stopAll();
     };
   }, [isStreaming]);
 
   const handleStartStream = () => {
+    if (!streamName.trim() || !userName.trim()) {
+      setError('Vui lòng nhập đủ thông tin');
+      return;
+    }
     setError('');
-    if (!streamName.trim()) {
-      setError('Vui lòng nhập tên livestream');
-      return;
-    }
-    if (!userName.trim()) {
-      setError('Vui lòng nhập tên người dùng');
-      return;
-    }
     setIsStreaming(true);
   };
 
@@ -188,91 +168,66 @@ export default function Broadcaster() {
     <div>
       {!isStreaming ? (
         <div>
-          <div style={{ marginBottom: 10 }}>
-            <label>
-              Tên người dùng (Streamer): <br />
-              <input
-                type="text"
-                value={userName}
-                onChange={(e) => setUserName(e.target.value)}
-                placeholder="Nhập tên của bạn"
-                style={{ width: '100%', padding: 8 }}
-              />
-            </label>
-          </div>
-
-          <div style={{ marginBottom: 10 }}>
-            <label>
-              Tên livestream: <br />
-              <input
-                type="text"
-                value={streamName}
-                onChange={(e) => setStreamName(e.target.value)}
-                placeholder="Nhập tên livestream"
-                style={{ width: '100%', padding: 8 }}
-              />
-            </label>
-          </div>
-
-          <div style={{ marginBottom: 10 }}>
-            <label>
-              Nguồn video:
-              <select
-                value={videoSource}
-                onChange={(e) => setVideoSource(e.target.value)}
-                style={{ width: '100%', padding: 8 }}
-              >
-                <option value="camera">Camera</option>
-                <option value="screen">Chia sẻ màn hình</option>
-              </select>
-            </label>
-          </div>
-
-          {error && <div style={{ color: 'red', marginBottom: 10 }}>{error}</div>}
-          <button onClick={handleStartStream} style={{ padding: '10px 20px', fontSize: 16 }}>
-            Xác nhận và bắt đầu Livestream
+          <input
+            placeholder="Tên bạn"
+            value={userName}
+            onChange={(e) => setUserName(e.target.value)}
+            style={{ width: '100%', marginBottom: 10, height: 40, fontSize: 16 }}
+          />
+          <input
+            placeholder="Tên livestream"
+            value={streamName}
+            onChange={(e) => setStreamName(e.target.value)}
+            style={{ width: '100%', marginBottom: 10, height: 40, fontSize: 16 }}
+          />
+          <select
+            value={videoSource}
+            onChange={(e) => setVideoSource(e.target.value)}
+            style={{ width: '100%', marginBottom: 10, height: 45, fontSize: 16 }}
+          >
+            <option value="camera">Chỉ Camera</option>
+            <option value="screen">Chỉ Màn hình</option>
+            <option value="both">Cả 2</option>
+          </select>
+          {error && <div style={{ color: 'red', marginBottom: 8 }}>{error}</div>}
+          <button
+            onClick={handleStartStream}
+            style={{ width: '100%', height: 45, fontSize: 16 }}
+          >
+            Bắt đầu livestream
           </button>
         </div>
       ) : (
         <div>
-          <div style={{ marginBottom: 10 }}>
-            <strong>{`Livestream: ${streamName} - Người dùng: ${userName}`}</strong>
-            <br />
-            <span>Số người xem: {viewerCount}</span>
-          </div>
-
-          <video
-            ref={localVideo}
-            autoPlay
-            muted
-            playsInline
-            style={{ width: '100%', backgroundColor: '#000', marginBottom: 10 }}
-          />
-
-          <div style={{ marginBottom: 10 }}>
-            <label>
-              Chuyển đổi nguồn video:
-              <select
-                value={videoSource}
-                onChange={(e) => switchStream(e.target.value)}
-                style={{ width: '100%', padding: 8 }}
-              >
-                <option value="camera">Camera</option>
-                <option value="screen">Chia sẻ màn hình</option>
-              </select>
-            </label>
-          </div>
-
-          <div style={{ marginBottom: 10 }}>
-            <button onClick={toggleVideo} style={{ marginRight: 10, padding: '8px 16px' }}>
-              {videoEnabled ? 'Tắt Camera/Màn hình' : 'Bật lại Camera/Màn hình'}
+          <p>
+            <b>Stream Name: {streamName}</b> - Username: {userName} | Viewers: {viewerCount}
+          </p>
+          {videoSource !== 'camera' && (
+            <video
+              ref={localScreenVideo}
+              autoPlay
+              muted
+              playsInline
+              style={{ width: '100%', background: '#000' }}
+            />
+          )}
+          {videoSource !== 'screen' && (
+            <video
+              ref={localCameraVideo}
+              autoPlay
+              muted
+              playsInline
+              style={{ width: videoSource === 'both' ? '30%' : '100%', background: '#000' }}
+            />
+          )}
+          <div>
+            <button onClick={toggleVideo}>
+              {videoEnabled ? 'Tắt Video' : 'Bật Video'}
             </button>
-
-            <button onClick={toggleAudio} style={{ padding: '8px 16px' }}>
+            <button onClick={toggleAudio}>
               {audioEnabled ? 'Tắt Mic' : 'Bật Mic'}
             </button>
           </div>
-
           <Chat broadcasterId={broadcasterId} />
         </div>
       )}
