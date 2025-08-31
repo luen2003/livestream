@@ -22,7 +22,7 @@ const users = {}; // { socketId: userName }
 
 app.use(cors({
     //origin: "http://localhost:3000",
-    origin: "http://localhost:3000",
+    origin: "https://react-livestream-app.onrender.com/",
     methods: ["GET", "POST"],
 }));
 
