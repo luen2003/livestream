@@ -19,41 +19,6 @@ export default function Broadcaster() {
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [audioEnabled, setAudioEnabled] = useState(true);
 
-  // Get media stream based on source mode
-  const getMediaStream = async (source) => {
-    try {
-      stopAll();
-      if (source === 'camera') {
-        const cam = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        currentStreams.current = { camera: cam };
-        localCameraVideo.current.srcObject = cam;
-      } else if (source === 'screen') {
-        const scr = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-        currentStreams.current = { screen: scr };
-        localScreenVideo.current.srcObject = scr;
-      } else if (source === 'both') {
-        const scr = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-        const cam = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        currentStreams.current = { screen: scr, camera: cam };
-        localScreenVideo.current.srcObject = scr;
-        localCameraVideo.current.srcObject = cam;
-      }
-
-      // Update tracks for all peers when changing mode
-      Object.values(peerConnections.current).forEach((pc) => {
-        // Remove old tracks
-        pc.getSenders().forEach((sender) => pc.removeTrack(sender));
-        // Add new tracks
-        Object.values(currentStreams.current).forEach((stream) =>
-          stream.getTracks().forEach((track) => pc.addTrack(track, stream))
-        );
-      });
-    } catch (err) {
-      console.error('Error getting media:', err);
-      setError('Không thể truy cập nguồn video');
-    }
-  };
-
   // Stop all old tracks
   const stopAll = () => {
     Object.values(currentStreams.current).forEach((stream) =>
@@ -62,61 +27,113 @@ export default function Broadcaster() {
     currentStreams.current = {};
   };
 
+  // Get media stream based on source mode
+  const getMediaStream = async (source) => {
+    try {
+      // Dừng track cũ để giải phóng tài nguyên
+      stopAll();
+      let newStreams = {};
+
+      if (source === 'camera') {
+        const cam = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        newStreams = { camera: cam };
+        if(localCameraVideo.current) localCameraVideo.current.srcObject = cam;
+      } else if (source === 'screen') {
+        const scr = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        newStreams = { screen: scr };
+        if(localScreenVideo.current) localScreenVideo.current.srcObject = scr;
+      } else if (source === 'both') {
+        const scr = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+        const cam = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        newStreams = { screen: scr, camera: cam };
+        if(localScreenVideo.current) localScreenVideo.current.srcObject = scr;
+        if(localCameraVideo.current) localCameraVideo.current.srcObject = cam;
+      }
+
+      currentStreams.current = newStreams;
+      return newStreams;
+    } catch (err) {
+      console.error('Error getting media:', err);
+      setError('Không thể truy cập nguồn video hoặc người dùng đã hủy');
+      return null;
+    }
+  };
+
+  // Hàm chuyển đổi chế độ khi đang Streaming
+  const switchMode = async (newMode) => {
+    setVideoSource(newMode);
+    
+    // 1. Lấy Stream mới
+    const newStreams = await getMediaStream(newMode);
+    if (!newStreams) return;
+
+    // 2. Thông báo server để Viewer cập nhật giao diện
+    socket.emit('change-stream-mode', { broadcasterId: socket.id, mode: newMode });
+
+    // 3. Cập nhật WebRTC cho tất cả Viewer (Renegotiation)
+    Object.keys(peerConnections.current).forEach(async (watcherId) => {
+      const pc = peerConnections.current[watcherId];
+      
+      // Xóa hết track cũ
+      pc.getSenders().forEach((sender) => pc.removeTrack(sender));
+
+      // Thêm track mới
+      Object.values(newStreams).forEach((stream) => {
+        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
+      });
+
+      // Tạo lại Offer để đồng bộ hóa track mới
+      try {
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        socket.emit('offer', watcherId, pc.localDescription);
+      } catch (e) {
+        console.error("Renegotiation failed:", e);
+      }
+    });
+  };
+
   // Toggle video on/off
-const toggleVideo = () => {
+  const toggleVideo = () => {
     const newState = !videoEnabled;
     Object.values(currentStreams.current).forEach((stream) => {
       stream.getVideoTracks().forEach((track) => (track.enabled = newState));
     });
     setVideoEnabled(newState);
-    // Gửi trạng thái mới lên server
     socket.emit('media-state-changed', { broadcasterId: socket.id, videoEnabled: newState, audioEnabled });
   };
 
   // Toggle audio on/off
-const toggleAudio = () => {
+  const toggleAudio = () => {
     const newState = !audioEnabled;
     Object.values(currentStreams.current).forEach((stream) => {
       stream.getAudioTracks().forEach((track) => (track.enabled = newState));
     });
     setAudioEnabled(newState);
-    // Gửi trạng thái mới lên server
     socket.emit('media-state-changed', { broadcasterId: socket.id, videoEnabled, audioEnabled: newState });
   };
 
-  // Start streaming and handle signaling
+  // Start streaming logic
   useEffect(() => {
     if (!isStreaming) return;
 
     socket.emit('broadcaster', { livestreamName: streamName, userName });
     setBroadcasterId(socket.id);
 
+    // Lấy stream ban đầu
     getMediaStream(videoSource);
 
     socket.on('watcher', async (watcherId) => {
       const pc = new RTCPeerConnection({
         iceServers: [
           { urls: ['stun:hk-turn1.xirsys.com'] },
-          {
-            username:
-              'aX_0HogGPHRGNvdzUm4KbELKRKa2e1-XXU7ykTjLzxPvYGtToLCCxE85kSodQr4uAAAAAGh001hkbHVvbmd0YQ==',
-            credential: '3e8fc950-6098-11f0-9c7a-0242ac120004',
-            urls: [
-              'turn:hk-turn1.xirsys.com:80?transport=udp',
-              'turn:hk-turn1.xirsys.com:3478?transport=udp',
-              'turn:hk-turn1.xirsys.com:80?transport=tcp',
-              'turn:hk-turn1.xirsys.com:3478?transport=tcp',
-              'turns:hk-turn1.xirsys.com:443?transport=tcp',
-              'turns:hk-turn1.xirsys.com:5349?transport=tcp',
-            ],
-          },
           { urls: 'stun:stun.l.google.com:19302' },
         ],
       });
 
       peerConnections.current[watcherId] = pc;
 
-      // Add all tracks from current streams
+      // Add tracks
       Object.values(currentStreams.current).forEach((stream) =>
         stream.getTracks().forEach((track) => pc.addTrack(track, stream))
       );
@@ -159,6 +176,7 @@ const toggleAudio = () => {
       peerConnections.current = {};
       stopAll();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isStreaming]);
 
   const handleStartStream = () => {
@@ -174,6 +192,7 @@ const toggleAudio = () => {
     <div>
       {!isStreaming ? (
         <div>
+          <h2>Thiết lập Livestream</h2>
           <input
             placeholder="Tên bạn"
             value={userName}
@@ -193,52 +212,94 @@ const toggleAudio = () => {
           >
             <option value="camera">Chỉ Camera</option>
             <option value="screen">Chỉ Màn hình</option>
-            <option value="both">Cả 2</option>
+            <option value="both">Cả 2 (Screen chính, Cam phụ)</option>
           </select>
           {error && <div style={{ color: 'red', marginBottom: 8 }}>{error}</div>}
           <button
             onClick={handleStartStream}
-            style={{ width: '100%', height: 45, fontSize: 16 }}
+            style={{ width: '100%', height: 45, fontSize: 16, backgroundColor: '#1890ff', color: 'white', border: 'none', borderRadius: 4 }}
           >
             Bắt đầu livestream
           </button>
         </div>
       ) : (
         <div>
-          <p>
-            <b>Stream Name: {streamName}</b> - Username: {userName} | Viewers: {viewerCount}
-          </p>
-         <div style={{ position: 'relative', width: '100%', background: '#000', minHeight: '300px' }}>
-            
-            {/* Overlay hiển thị trạng thái Tắt Mic/Cam */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+            <span>Tên Livestream:<b>{streamName}</b> - Người Livestream: {userName} | Số người xem: {viewerCount}</span>
+            <button onClick={() => window.location.reload()} style={{ background: 'red', color: 'white' }}>Kết thúc</button>
+          </div>
+
+          {/* Controls thay đổi chế độ khi đang live */}
+          <div style={{ marginBottom: 10, display: 'flex', gap: 10 }}>
+            <button 
+              disabled={videoSource === 'camera'} 
+              onClick={() => switchMode('camera')}
+              style={{ flex: 1, background: videoSource === 'camera' ? '#ccc' : '#e6f7ff' }}
+            >
+              📷 Camera
+            </button>
+            <button 
+              disabled={videoSource === 'screen'} 
+              onClick={() => switchMode('screen')}
+              style={{ flex: 1, background: videoSource === 'screen' ? '#ccc' : '#e6f7ff' }}
+            >
+              🖥 Screen
+            </button>
+            <button 
+              disabled={videoSource === 'both'} 
+              onClick={() => switchMode('both')}
+              style={{ flex: 1, background: videoSource === 'both' ? '#ccc' : '#e6f7ff' }}
+            >
+              📷 + 🖥 Both
+            </button>
+          </div>
+
+          <div style={{ position: 'relative', width: '100%', background: '#000', minHeight: '400px', borderRadius: 8, overflow: 'hidden' }}>
+            {/* Status Overlay */}
             <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 10, display: 'flex', gap: 10 }}>
-                {!videoEnabled && <span style={{ background: 'red', color: 'white', padding: '5px' }}>📷 Cam Off</span>}
-                {!audioEnabled && <span style={{ background: 'red', color: 'white', padding: '5px' }}>🔇 Mic Off</span>}
+                {!videoEnabled && <span style={{ background: 'red', color: 'white', padding: '4px 8px', borderRadius: 4 }}>📷 Cam Off</span>}
+                {!audioEnabled && <span style={{ background: 'red', color: 'white', padding: '4px 8px', borderRadius: 4 }}>🔇 Mic Off</span>}
             </div>
 
-            {videoSource !== 'camera' && (
-              <video ref={localScreenVideo} autoPlay muted playsInline style={{ width: '100%' }} />
+            {/* Render Video based on mode */}
+            {/* 1. Camera Mode: Show localCameraVideo full */}
+            {videoSource === 'camera' && (
+               <video ref={localCameraVideo} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
             )}
-            {videoSource !== 'screen' && (
-              <video
-                ref={localCameraVideo}
-                autoPlay muted playsInline
-                style={{ 
-                    width: videoSource === 'both' ? '30%' : '100%', 
-                    position: videoSource === 'both' ? 'absolute' : 'relative',
-                    bottom: 0, right: 0 
-                }}
-              />
+
+            {/* 2. Screen Mode: Show localScreenVideo full */}
+            {videoSource === 'screen' && (
+               <video ref={localScreenVideo} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+            )}
+
+            {/* 3. Both Mode: Screen Full, Camera PIP */}
+            {videoSource === 'both' && (
+              <>
+                <video ref={localScreenVideo} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                <video
+                  ref={localCameraVideo}
+                  autoPlay muted playsInline
+                  style={{ 
+                      width: '25%', 
+                      position: 'absolute',
+                      bottom: 10, right: 10, 
+                      border: '2px solid white',
+                      borderRadius: 8,
+                      boxShadow: '0 4px 8px rgba(0,0,0,0.5)',
+                      objectFit: 'cover'
+                  }}
+                />
+              </>
             )}
           </div>
 
-          <div>
-            <button onClick={toggleVideo}>{videoEnabled ? 'Tắt Video' : 'Bật Video'}</button>
-            <button onClick={toggleAudio}>{audioEnabled ? 'Tắt Mic' : 'Bật Mic'}</button>
+          <div style={{ marginTop: 10, display: 'flex', gap: 10 }}>
+            <button onClick={toggleVideo}>{videoEnabled ? 'Tắt hình (Đen)' : 'Bật hình'}</button>
+            <button onClick={toggleAudio}>{audioEnabled ? 'Tắt tiếng' : 'Bật tiếng'}</button>
           </div>
           <Chat broadcasterId={broadcasterId} />
         </div>
       )}
     </div>
-      )}
-
+  );
+}

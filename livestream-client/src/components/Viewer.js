@@ -3,14 +3,19 @@ import { socket } from '../socket';
 import Chat from './Chat';
 
 export default function Viewer({ broadcasterId }) {
-  const screenVideo = useRef();
-  const cameraVideo = useRef();
+  const mainVideo = useRef(); // Video chính (Screen hoặc Camera khi ở mode đơn)
+  const pipVideo = useRef();  // Video phụ (Camera khi ở mode Both)
+  
   const [userName, setUserName] = useState('');
   const [isViewing, setIsViewing] = useState(false);
   const [viewerCount, setViewerCount] = useState(0);
   const [error, setError] = useState('');
-const [mediaState, setMediaState] = useState({ videoEnabled: true, audioEnabled: true });
+  const [mediaState, setMediaState] = useState({ videoEnabled: true, audioEnabled: true });
   const [isStreamEnded, setIsStreamEnded] = useState(false);
+  
+  // State để quản lý layout: camera | screen | both
+  const [viewMode, setViewMode] = useState('camera'); 
+
   const handleStartViewing = () => {
     if (!userName.trim()) {
       setError('Nhập tên');
@@ -28,33 +33,29 @@ const [mediaState, setMediaState] = useState({ videoEnabled: true, audioEnabled:
     const pc = new RTCPeerConnection({
       iceServers: [
         { urls: ['stun:hk-turn1.xirsys.com'] },
-        {
-          username:
-            'aX_0HogGPHRGNvdzUm4KbELKRKa2e1-XXU7ykTjLzxPvYGtToLCCxE85kSodQr4uAAAAAGh001hkbHVvbmd0YQ==',
-          credential: '3e8fc950-6098-11f0-9c7a-0242ac120004',
-          urls: [
-            'turn:hk-turn1.xirsys.com:80?transport=udp',
-            'turn:hk-turn1.xirsys.com:3478?transport=udp',
-            'turn:hk-turn1.xirsys.com:80?transport=tcp',
-            'turn:hk-turn1.xirsys.com:3478?transport=tcp',
-            'turns:hk-turn1.xirsys.com:443?transport=tcp',
-            'turns:hk-turn1.xirsys.com:5349?transport=tcp',
-          ],
-        },
         { urls: 'stun:stun.l.google.com:19302' },
       ],
     });
 
+    // Xử lý khi nhận được Stream từ Broadcaster
     pc.ontrack = (e) => {
-      if (e.track.kind === 'video') {
-        if (!screenVideo.current.srcObject) {
-          screenVideo.current.srcObject = e.streams[0];
-        } else {
-          cameraVideo.current.srcObject = e.streams[0];
-        }
+      const stream = e.streams[0];
+      console.log("Received track:", e.track.kind, "Stream ID:", stream.id);
+
+      // Nếu chỉ có 1 stream (Camera hoặc Screen mode) -> Gán vào mainVideo
+      if (!pipVideo.current.srcObject) {
+         // Thường stream đầu tiên đến là Main
+         if (mainVideo.current) mainVideo.current.srcObject = stream;
       }
-      if (e.track.kind === 'audio') {
-        if (!screenVideo.current.srcObject) screenVideo.current.srcObject = e.streams[0];
+      
+      // Logic gán stream thông minh hơn dựa trên số lượng track
+      // Lưu ý: WebRTC không phân biệt rõ "Screen" hay "Cam" qua track, ta phải dựa vào sự kiện 'broadcaster-mode-updated'
+      // để biết cách hiển thị, nhưng ở đây ta gán tạm.
+      
+      // Nếu có 2 stream (Both mode), stream thứ 2 đến thường là Camera (do logic broadcaster addTrack)
+      // Tuy nhiên để chắc chắn, ta sẽ gán dựa trên việc mainVideo đã có chưa.
+      if (mainVideo.current && mainVideo.current.srcObject && mainVideo.current.srcObject.id !== stream.id) {
+          if (pipVideo.current) pipVideo.current.srcObject = stream;
       }
     };
 
@@ -64,6 +65,8 @@ const [mediaState, setMediaState] = useState({ videoEnabled: true, audioEnabled:
 
     socket.on('offer', async (id, desc) => {
       if (id !== broadcasterId) return;
+      // Khi Broadcaster đổi mode, họ gửi Offer mới (Renegotiation)
+      // Viewer cần setRemoteDescription lại để cập nhật track
       await pc.setRemoteDescription(new RTCSessionDescription(desc));
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
@@ -73,18 +76,30 @@ const [mediaState, setMediaState] = useState({ videoEnabled: true, audioEnabled:
     socket.on('candidate', (id, candidate) => {
       if (id === broadcasterId) pc.addIceCandidate(new RTCIceCandidate(candidate));
     });
-socket.on('media-state-changed', (state) => {
+
+    socket.on('media-state-changed', (state) => {
       setMediaState(state);
     });
-    // ---> THÊM: Lắng nghe sự kiện Stream kết thúc
-    socket.on('stream-ended', () => {
-      setIsStreamEnded(true); // Hiển thị màn hình thông báo
+
+    // Nhận tín hiệu đổi mode từ Broadcaster
+    socket.on('broadcaster-mode-updated', (mode) => {
+      console.log("Mode updated to:", mode);
+      setViewMode(mode);
       
-      // Đếm ngược 3 giây rồi reload về trang chủ
+      // Reset srcObject để tránh bị treo hình cũ khi chuyển đổi nhanh
+      if (mode !== 'both') {
+          if (pipVideo.current) pipVideo.current.srcObject = null;
+      }
+      // Reload lại srcObject cho đúng slot nếu cần thiết (tùy chỉnh nâng cao)
+    });
+
+    socket.on('stream-ended', () => {
+      setIsStreamEnded(true);
       setTimeout(() => {
-        window.location.href = '/'; // Hoặc window.location.reload()
+        window.location.href = '/'; 
       }, 3000);
     });
+
     socket.on('viewerCount', (count) => setViewerCount(count));
 
     return () => {
@@ -94,22 +109,21 @@ socket.on('media-state-changed', (state) => {
       socket.off('viewerCount');
       socket.off('media-state-changed');
       socket.off('stream-ended');
+      socket.off('broadcaster-mode-updated');
     };
   }, [isViewing, broadcasterId]);
-if (isStreamEnded) {
+
+  if (isStreamEnded) {
     return (
-      <div style={{ 
-        height: '100vh', display: 'flex', flexDirection: 'column', 
-        alignItems: 'center', justifyContent: 'center', background: 'black', color: 'white' 
-      }}>
+      <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'black', color: 'white' }}>
         <h1>Livestream đã kết thúc</h1>
         <p>Đang quay về trang chủ trong 3 giây...</p>
       </div>
     );
   }
+
   if (!isViewing) {
     return (
-      
       <div>
         <input
           placeholder="Tên của bạn"
@@ -134,91 +148,69 @@ if (isStreamEnded) {
         Đang xem | <span style={{ color: '#1890ff' }}>Viewers: {viewerCount}</span>
       </p>
       
-      {/* Container chính cho Video */}
       <div style={{ 
         position: 'relative', 
         background: '#000', 
         borderRadius: '12px', 
         overflow: 'hidden', 
         boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
-        minHeight: '300px' 
+        minHeight: '400px',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center'
       }}>
         
-        {/* 1. Overlay thông báo khi Broadcaster tắt Camera hoàn toàn */}
+        {/* Overlay trạng thái */}
         {!mediaState.videoEnabled && (
-          <div style={{ 
-            position: 'absolute', 
-            inset: 0, 
-            display: 'flex', 
-            flexDirection: 'column',
-            alignItems: 'center', 
-            justifyContent: 'center', 
-            background: 'rgba(45, 45, 45, 0.9)', 
-            color: 'white', 
-            zIndex: 15 
-          }}>
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(45, 45, 45, 0.9)', color: 'white', zIndex: 15 }}>
             <h2 style={{ marginBottom: '10px' }}>📷</h2>
-            <p style={{ fontSize: '18px' }}>Người phát đã tạm tắt Camera</p>
+            <p style={{ fontSize: '18px' }}>Người phát đã tạm tắt Hình ảnh</p>
           </div>
         )}
 
-        {/* 2. Icon thông báo khi Broadcaster tắt Mic (Góc trên bên phải) */}
         {!mediaState.audioEnabled && (
-          <div style={{ 
-            position: 'absolute', 
-            top: 15, 
-            right: 15, 
-            zIndex: 20, 
-            background: '#ff4d4f', 
-            color: 'white', 
-            padding: '6px 12px', 
-            borderRadius: '20px',
-            fontSize: '14px',
-            fontWeight: '600',
-            display: 'flex',
-            alignItems: 'center',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
-          }}>
+          <div style={{ position: 'absolute', top: 15, right: 15, zIndex: 20, background: '#ff4d4f', color: 'white', padding: '6px 12px', borderRadius: '20px', fontSize: '14px', fontWeight: '600', display: 'flex', alignItems: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.15)' }}>
             <span style={{ marginRight: '5px' }}>🔇</span> Muted
           </div>
         )}
 
-        {/* 3. Video chính (Thường là Màn hình hoặc luồng camera chính) */}
+        {/* --- VIDEO AREA --- */}
+        
+        {/* Main Video: Dùng cho Camera (mode Camera) HOẶC Screen (mode Screen/Both) */}
         <video 
-          ref={screenVideo} 
+          ref={mainVideo} 
           autoPlay 
           playsInline 
           style={{ 
             width: '100%', 
-            display: 'block',
+            height: '100%',
             maxHeight: '80vh',
-            objectFit: 'contain' // Giữ toàn bộ tỉ lệ màn hình chia sẻ
+            objectFit: viewMode === 'screen' || viewMode === 'both' ? 'contain' : 'cover' // Screen cần xem hết chữ, Camera có thể crop
           }} 
         />
 
-        {/* 4. Video nhỏ (Camera phụ - Góc dưới bên phải) */}
+        {/* PIP Video: Chỉ hiện khi mode = both (Dùng cho Camera) */}
         <video 
-          ref={cameraVideo} 
+          ref={pipVideo} 
           autoPlay 
           playsInline 
           style={{ 
+            display: viewMode === 'both' ? 'block' : 'none',
             position: 'absolute', 
             bottom: 15, 
             right: 15, 
-            width: '28%', 
-            aspectRatio: '16/9', // Ép khung hình về tỉ lệ 16:9
-            objectFit: 'cover',   // QUAN TRỌNG: Cắt bỏ khoảng đen thừa để lấp đầy khung
+            width: '25%', 
+            aspectRatio: '16/9',
+            objectFit: 'cover',
             border: '2px solid rgba(255, 255, 255, 0.8)',
             borderRadius: '8px',
             zIndex: 10,
-            display: mediaState.videoEnabled ? 'block' : 'none',
-            backgroundColor: '#1a1a1a', // Nền tối nếu chưa load kịp
+            backgroundColor: '#1a1a1a',
             boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
           }} 
         />
       </div>
 
-      {/* Khu vực Chat bên dưới video */}
       <div style={{ marginTop: '20px' }}>
         <Chat broadcasterId={broadcasterId} />
       </div>
