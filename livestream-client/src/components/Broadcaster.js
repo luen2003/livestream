@@ -312,10 +312,48 @@ export default function Broadcaster() {
             )}
           </div>
 
-          <div style={{ marginTop: 10, display: 'flex', gap: 10 }}>
-            <button onClick={toggleVideo}>{videoEnabled ? 'Tắt hình' : 'Bật hình'}</button>
-            <button onClick={toggleAudio}>{audioEnabled ? 'Tắt tiếng' : 'Bật tiếng'}</button>
-          </div>
+<div style={{ marginTop: 10, display: 'flex', gap: 10 }}>
+  <button
+    onClick={toggleVideo}
+    style={{
+      flex: 1,
+      padding: '10px 0',
+      fontSize: 16,
+      borderRadius: 8,
+      border: 'none',
+      cursor: 'pointer',
+      backgroundColor: videoEnabled ? '#52c41a' : '#ff4d4f', // xanh khi bật, đỏ khi tắt
+      color: 'white',
+      transition: 'all 0.3s ease',
+      boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+    }}
+    onMouseEnter={e => e.currentTarget.style.opacity = 0.85}
+    onMouseLeave={e => e.currentTarget.style.opacity = 1}
+  >
+    {videoEnabled ? '📷 Tắt hình' : '📷 Bật hình'}
+  </button>
+
+  <button
+    onClick={toggleAudio}
+    style={{
+      flex: 1,
+      padding: '10px 0',
+      fontSize: 16,
+      borderRadius: 8,
+      border: 'none',
+      cursor: 'pointer',
+      backgroundColor: audioEnabled ? '#1890ff' : '#ff4d4f',
+      color: 'white',
+      transition: 'all 0.3s ease',
+      boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
+    }}
+    onMouseEnter={e => e.currentTarget.style.opacity = 0.85}
+    onMouseLeave={e => e.currentTarget.style.opacity = 1}
+  >
+    {audioEnabled ? '🔇 Tắt tiếng' : '🔊Bật tiếng'}
+  </button>
+</div>
+
           <Chat broadcasterId={broadcasterId} />
         </div>
       )}
