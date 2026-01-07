@@ -5,16 +5,16 @@ import Chat from './Chat';
 export default function Viewer({ broadcasterId }) {
   const mainVideo = useRef(); // Video chính (Screen hoặc Camera khi ở mode đơn)
   const pipVideo = useRef();  // Video phụ (Camera khi ở mode Both)
-  
+
   const [userName, setUserName] = useState('');
   const [isViewing, setIsViewing] = useState(false);
   const [viewerCount, setViewerCount] = useState(0);
   const [error, setError] = useState('');
   const [mediaState, setMediaState] = useState({ videoEnabled: true, audioEnabled: true });
   const [isStreamEnded, setIsStreamEnded] = useState(false);
-  
+
   // State để quản lý layout: camera | screen | both
-  const [viewMode, setViewMode] = useState('camera'); 
+  const [viewMode, setViewMode] = useState('camera');
 
   const handleStartViewing = () => {
     if (!userName.trim()) {
@@ -42,20 +42,12 @@ export default function Viewer({ broadcasterId }) {
       const stream = e.streams[0];
       console.log("Received track:", e.track.kind, "Stream ID:", stream.id);
 
-      // Nếu chỉ có 1 stream (Camera hoặc Screen mode) -> Gán vào mainVideo
       if (!pipVideo.current.srcObject) {
-         // Thường stream đầu tiên đến là Main
-         if (mainVideo.current) mainVideo.current.srcObject = stream;
+        if (mainVideo.current) mainVideo.current.srcObject = stream;
       }
-      
-      // Logic gán stream thông minh hơn dựa trên số lượng track
-      // Lưu ý: WebRTC không phân biệt rõ "Screen" hay "Cam" qua track, ta phải dựa vào sự kiện 'broadcaster-mode-updated'
-      // để biết cách hiển thị, nhưng ở đây ta gán tạm.
-      
-      // Nếu có 2 stream (Both mode), stream thứ 2 đến thường là Camera (do logic broadcaster addTrack)
-      // Tuy nhiên để chắc chắn, ta sẽ gán dựa trên việc mainVideo đã có chưa.
+
       if (mainVideo.current && mainVideo.current.srcObject && mainVideo.current.srcObject.id !== stream.id) {
-          if (pipVideo.current) pipVideo.current.srcObject = stream;
+        if (pipVideo.current) pipVideo.current.srcObject = stream;
       }
     };
 
@@ -65,8 +57,6 @@ export default function Viewer({ broadcasterId }) {
 
     socket.on('offer', async (id, desc) => {
       if (id !== broadcasterId) return;
-      // Khi Broadcaster đổi mode, họ gửi Offer mới (Renegotiation)
-      // Viewer cần setRemoteDescription lại để cập nhật track
       await pc.setRemoteDescription(new RTCSessionDescription(desc));
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
@@ -81,22 +71,18 @@ export default function Viewer({ broadcasterId }) {
       setMediaState(state);
     });
 
-    // Nhận tín hiệu đổi mode từ Broadcaster
     socket.on('broadcaster-mode-updated', (mode) => {
       console.log("Mode updated to:", mode);
       setViewMode(mode);
-      
-      // Reset srcObject để tránh bị treo hình cũ khi chuyển đổi nhanh
       if (mode !== 'both') {
-          if (pipVideo.current) pipVideo.current.srcObject = null;
+        if (pipVideo.current) pipVideo.current.srcObject = null;
       }
-      // Reload lại srcObject cho đúng slot nếu cần thiết (tùy chỉnh nâng cao)
     });
 
     socket.on('stream-ended', () => {
       setIsStreamEnded(true);
       setTimeout(() => {
-        window.location.href = '/'; 
+        window.location.href = '/';
       }, 3000);
     });
 
@@ -144,22 +130,44 @@ export default function Viewer({ broadcasterId }) {
 
   return (
     <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '10px' }}>
-      <p style={{ fontWeight: 'bold' }}>
-        Đang xem | <span style={{ color: '#1890ff' }}>Viewers: {viewerCount}</span>
-      </p>
-      
-      <div style={{ 
-        position: 'relative', 
-        background: '#000', 
-        borderRadius: '12px', 
-        overflow: 'hidden', 
+
+      {/* Header với nút Trở về và thông tin stream */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', marginBottom: '10px', gap: '5px' }}>
+
+        {/* Nút Trở về */}
+        <button
+          onClick={() => window.location.reload()}
+          style={{
+            background: '#6c757d',
+            color: 'white',
+            border: 'none',
+            padding: '8px 16px',
+            borderRadius: '4px',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '5px'
+          }}
+        >
+          ⬅ Trở về
+        </button>
+        <span style={{ fontWeight: 'bold' }}>
+          Đang xem | <span style={{ color: '#000' }}>Viewers: {viewerCount}</span>
+        </span>
+      </div>
+
+      <div style={{
+        position: 'relative',
+        background: '#000',
+        borderRadius: '12px',
+        overflow: 'hidden',
         boxShadow: '0 8px 24px rgba(0,0,0,0.2)',
         minHeight: '400px',
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center'
       }}>
-        
+
         {/* Overlay trạng thái */}
         {!mediaState.videoEnabled && (
           <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: 'rgba(45, 45, 45, 0.9)', color: 'white', zIndex: 15 }}>
@@ -175,31 +183,31 @@ export default function Viewer({ broadcasterId }) {
         )}
 
         {/* --- VIDEO AREA --- */}
-        
-        {/* Main Video: Dùng cho Camera (mode Camera) HOẶC Screen (mode Screen/Both) */}
-        <video 
-          ref={mainVideo} 
-          autoPlay 
-          playsInline 
-          style={{ 
-            width: '100%', 
+
+        {/* Main Video */}
+        <video
+          ref={mainVideo}
+          autoPlay
+          playsInline
+          style={{
+            width: '100%',
             height: '100%',
             maxHeight: '80vh',
-            objectFit: viewMode === 'screen' || viewMode === 'both' ? 'contain' : 'cover' // Screen cần xem hết chữ, Camera có thể crop
-          }} 
+            objectFit: viewMode === 'screen' || viewMode === 'both' ? 'contain' : 'cover'
+          }}
         />
 
-        {/* PIP Video: Chỉ hiện khi mode = both (Dùng cho Camera) */}
-        <video 
-          ref={pipVideo} 
-          autoPlay 
-          playsInline 
-          style={{ 
+        {/* PIP Video */}
+        <video
+          ref={pipVideo}
+          autoPlay
+          playsInline
+          style={{
             display: viewMode === 'both' ? 'block' : 'none',
-            position: 'absolute', 
-            bottom: 15, 
-            right: 15, 
-            width: '25%', 
+            position: 'absolute',
+            bottom: 15,
+            right: 15,
+            width: '25%',
             aspectRatio: '16/9',
             objectFit: 'cover',
             border: '2px solid rgba(255, 255, 255, 0.8)',
@@ -207,7 +215,7 @@ export default function Viewer({ broadcasterId }) {
             zIndex: 10,
             backgroundColor: '#1a1a1a',
             boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
-          }} 
+          }}
         />
       </div>
 

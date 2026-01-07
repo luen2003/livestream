@@ -37,17 +37,17 @@ export default function Broadcaster() {
       if (source === 'camera') {
         const cam = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         newStreams = { camera: cam };
-        if(localCameraVideo.current) localCameraVideo.current.srcObject = cam;
+        if (localCameraVideo.current) localCameraVideo.current.srcObject = cam;
       } else if (source === 'screen') {
         const scr = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
         newStreams = { screen: scr };
-        if(localScreenVideo.current) localScreenVideo.current.srcObject = scr;
+        if (localScreenVideo.current) localScreenVideo.current.srcObject = scr;
       } else if (source === 'both') {
         const scr = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
         const cam = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         newStreams = { screen: scr, camera: cam };
-        if(localScreenVideo.current) localScreenVideo.current.srcObject = scr;
-        if(localCameraVideo.current) localCameraVideo.current.srcObject = cam;
+        if (localScreenVideo.current) localScreenVideo.current.srcObject = scr;
+        if (localCameraVideo.current) localCameraVideo.current.srcObject = cam;
       }
 
       currentStreams.current = newStreams;
@@ -62,7 +62,7 @@ export default function Broadcaster() {
   // Hàm chuyển đổi chế độ khi đang Streaming
   const switchMode = async (newMode) => {
     setVideoSource(newMode);
-    
+
     // 1. Lấy Stream mới
     const newStreams = await getMediaStream(newMode);
     if (!newStreams) return;
@@ -73,7 +73,7 @@ export default function Broadcaster() {
     // 3. Cập nhật WebRTC cho tất cả Viewer (Renegotiation)
     Object.keys(peerConnections.current).forEach(async (watcherId) => {
       const pc = peerConnections.current[watcherId];
-      
+
       // Xóa hết track cũ
       pc.getSenders().forEach((sender) => pc.removeTrack(sender));
 
@@ -224,29 +224,48 @@ export default function Broadcaster() {
         </div>
       ) : (
         <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
-            <span>Tên Livestream:<b>{streamName}</b> - Người Livestream: {userName} | Số người xem: {viewerCount}</span>
-            <button onClick={() => window.location.reload()} style={{ background: 'red', color: 'white' }}>Kết thúc</button>
+          {/* HEADER: Nút Trở về và Thông tin Stream */}
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', marginBottom: 10, gap: 5 }}>
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                background: '#6c757d',
+                color: 'white',
+                border: 'none',
+                padding: '8px 16px',
+                borderRadius: '4px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '5px'
+              }}
+            >
+              ⬅ Trở về
+            </button>
+            <div style={{ fontSize: 14 }}>
+              Tên livestream: <b>{streamName}</b> | Người livestream: {userName} | Số người xem: {viewerCount}
+            </div>
           </div>
+
 
           {/* Controls thay đổi chế độ khi đang live */}
           <div style={{ marginBottom: 10, display: 'flex', gap: 10 }}>
-            <button 
-              disabled={videoSource === 'camera'} 
+            <button
+              disabled={videoSource === 'camera'}
               onClick={() => switchMode('camera')}
               style={{ flex: 1, background: videoSource === 'camera' ? '#ccc' : '#e6f7ff' }}
             >
               📷 Camera
             </button>
-            <button 
-              disabled={videoSource === 'screen'} 
+            <button
+              disabled={videoSource === 'screen'}
               onClick={() => switchMode('screen')}
               style={{ flex: 1, background: videoSource === 'screen' ? '#ccc' : '#e6f7ff' }}
             >
               🖥 Screen
             </button>
-            <button 
-              disabled={videoSource === 'both'} 
+            <button
+              disabled={videoSource === 'both'}
               onClick={() => switchMode('both')}
               style={{ flex: 1, background: videoSource === 'both' ? '#ccc' : '#e6f7ff' }}
             >
@@ -257,19 +276,19 @@ export default function Broadcaster() {
           <div style={{ position: 'relative', width: '100%', background: '#000', minHeight: '400px', borderRadius: 8, overflow: 'hidden' }}>
             {/* Status Overlay */}
             <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 10, display: 'flex', gap: 10 }}>
-                {!videoEnabled && <span style={{ background: 'red', color: 'white', padding: '4px 8px', borderRadius: 4 }}>📷 Cam Off</span>}
-                {!audioEnabled && <span style={{ background: 'red', color: 'white', padding: '4px 8px', borderRadius: 4 }}>🔇 Mic Off</span>}
+              {!videoEnabled && <span style={{ background: 'red', color: 'white', padding: '4px 8px', borderRadius: 4 }}>📷 Cam Off</span>}
+              {!audioEnabled && <span style={{ background: 'red', color: 'white', padding: '4px 8px', borderRadius: 4 }}>🔇 Mic Off</span>}
             </div>
 
             {/* Render Video based on mode */}
             {/* 1. Camera Mode: Show localCameraVideo full */}
             {videoSource === 'camera' && (
-               <video ref={localCameraVideo} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              <video ref={localCameraVideo} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
             )}
 
             {/* 2. Screen Mode: Show localScreenVideo full */}
             {videoSource === 'screen' && (
-               <video ref={localScreenVideo} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              <video ref={localScreenVideo} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
             )}
 
             {/* 3. Both Mode: Screen Full, Camera PIP */}
@@ -279,14 +298,14 @@ export default function Broadcaster() {
                 <video
                   ref={localCameraVideo}
                   autoPlay muted playsInline
-                  style={{ 
-                      width: '25%', 
-                      position: 'absolute',
-                      bottom: 10, right: 10, 
-                      border: '2px solid white',
-                      borderRadius: 8,
-                      boxShadow: '0 4px 8px rgba(0,0,0,0.5)',
-                      objectFit: 'cover'
+                  style={{
+                    width: '25%',
+                    position: 'absolute',
+                    bottom: 10, right: 10,
+                    border: '2px solid white',
+                    borderRadius: 8,
+                    boxShadow: '0 4px 8px rgba(0,0,0,0.5)',
+                    objectFit: 'cover'
                   }}
                 />
               </>

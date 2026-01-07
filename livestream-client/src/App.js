@@ -41,13 +41,13 @@ function App() {
         </div>
       )}
 
-      {role && (
+      {/* {role && (
         <div style={{ textAlign: 'left', marginBottom: 20 }}>
           <button style={backButtonStyle} onClick={handleBack}>
             Trở về
           </button>
         </div>
-      )}
+      )} */}
 
       {role === 'broadcaster' && <Broadcaster />}
       {role === 'viewer' && <LiveStreamList />}
