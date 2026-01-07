@@ -21,8 +21,8 @@ const viewers = {}; // { broadcasterId: [ viewerSocketId, ... ] }
 const users = {}; // { socketId: userName }
 
 app.use(cors({
-    //origin: "http://localhost:3000",
-    origin: "https://react-livestream-app.onrender.com/",
+    origin: "http://localhost:3000",
+    //origin: "https://react-livestream-app.onrender.com/",
     methods: ["GET", "POST"],
 }));
 
@@ -46,6 +46,12 @@ io.on('connection', (socket) => {
 
   socket.on('setUserName', (userName) => {
     users[socket.id] = userName || 'Unknown';
+  });
+  socket.on('media-state-changed', ({ broadcasterId, videoEnabled, audioEnabled }) => {
+    const viewersInStream = viewers[broadcasterId] || [];
+    viewersInStream.forEach((viewerId) => {
+      io.to(viewerId).emit('media-state-changed', { videoEnabled, audioEnabled });
+    });
   });
 
   socket.on("broadcasterModeChanged", ({ broadcasterId, mode }) => {
@@ -125,7 +131,20 @@ io.on('connection', (socket) => {
 
   socket.on('disconnect', () => {
     delete users[socket.id];
+// Nếu là broadcaster
+    if (broadcasters[socket.id]) {
+      // ---> THÊM MỚI: Báo cho tất cả viewer là stream đã kết thúc TRƯỚC KHI xóa dữ liệu
+      const viewerList = viewers[socket.id] || [];
+      viewerList.forEach((viewerId) => {
+        io.to(viewerId).emit('stream-ended'); // Sự kiện này kích hoạt chuyển trang ở Viewer
+        io.to(viewerId).emit('viewerCount', 0);
+      });
 
+      delete broadcasters[socket.id];
+      io.emit('broadcastersList', Object.values(broadcasters));
+
+      delete viewers[socket.id]; 
+    }
     // Nếu là broadcaster
     if (broadcasters[socket.id]) {
       delete broadcasters[socket.id];

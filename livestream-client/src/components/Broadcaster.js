@@ -63,19 +63,25 @@ export default function Broadcaster() {
   };
 
   // Toggle video on/off
-  const toggleVideo = () => {
+const toggleVideo = () => {
+    const newState = !videoEnabled;
     Object.values(currentStreams.current).forEach((stream) => {
-      stream.getVideoTracks().forEach((track) => (track.enabled = !track.enabled));
+      stream.getVideoTracks().forEach((track) => (track.enabled = newState));
     });
-    setVideoEnabled((prev) => !prev);
+    setVideoEnabled(newState);
+    // Gửi trạng thái mới lên server
+    socket.emit('media-state-changed', { broadcasterId: socket.id, videoEnabled: newState, audioEnabled });
   };
 
   // Toggle audio on/off
-  const toggleAudio = () => {
+const toggleAudio = () => {
+    const newState = !audioEnabled;
     Object.values(currentStreams.current).forEach((stream) => {
-      stream.getAudioTracks().forEach((track) => (track.enabled = !track.enabled));
+      stream.getAudioTracks().forEach((track) => (track.enabled = newState));
     });
-    setAudioEnabled((prev) => !prev);
+    setAudioEnabled(newState);
+    // Gửi trạng thái mới lên server
+    socket.emit('media-state-changed', { broadcasterId: socket.id, videoEnabled, audioEnabled: newState });
   };
 
   // Start streaming and handle signaling
@@ -202,35 +208,37 @@ export default function Broadcaster() {
           <p>
             <b>Stream Name: {streamName}</b> - Username: {userName} | Viewers: {viewerCount}
           </p>
-          {videoSource !== 'camera' && (
-            <video
-              ref={localScreenVideo}
-              autoPlay
-              muted
-              playsInline
-              style={{ width: '100%', background: '#000' }}
-            />
-          )}
-          {videoSource !== 'screen' && (
-            <video
-              ref={localCameraVideo}
-              autoPlay
-              muted
-              playsInline
-              style={{ width: videoSource === 'both' ? '30%' : '100%', background: '#000' }}
-            />
-          )}
+         <div style={{ position: 'relative', width: '100%', background: '#000', minHeight: '300px' }}>
+            
+            {/* Overlay hiển thị trạng thái Tắt Mic/Cam */}
+            <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 10, display: 'flex', gap: 10 }}>
+                {!videoEnabled && <span style={{ background: 'red', color: 'white', padding: '5px' }}>📷 Cam Off</span>}
+                {!audioEnabled && <span style={{ background: 'red', color: 'white', padding: '5px' }}>🔇 Mic Off</span>}
+            </div>
+
+            {videoSource !== 'camera' && (
+              <video ref={localScreenVideo} autoPlay muted playsInline style={{ width: '100%' }} />
+            )}
+            {videoSource !== 'screen' && (
+              <video
+                ref={localCameraVideo}
+                autoPlay muted playsInline
+                style={{ 
+                    width: videoSource === 'both' ? '30%' : '100%', 
+                    position: videoSource === 'both' ? 'absolute' : 'relative',
+                    bottom: 0, right: 0 
+                }}
+              />
+            )}
+          </div>
+
           <div>
-            <button onClick={toggleVideo}>
-              {videoEnabled ? 'Tắt Video' : 'Bật Video'}
-            </button>
-            <button onClick={toggleAudio}>
-              {audioEnabled ? 'Tắt Mic' : 'Bật Mic'}
-            </button>
+            <button onClick={toggleVideo}>{videoEnabled ? 'Tắt Video' : 'Bật Video'}</button>
+            <button onClick={toggleAudio}>{audioEnabled ? 'Tắt Mic' : 'Bật Mic'}</button>
           </div>
           <Chat broadcasterId={broadcasterId} />
         </div>
       )}
     </div>
-  );
-}
+      )}
+
