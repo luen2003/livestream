@@ -32,7 +32,23 @@ export default function Viewer({ broadcasterId }) {
     if (!isViewing || !broadcasterId) return;
 
     const pc = new RTCPeerConnection({
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+       iceServers: [
+        { urls: ['stun:hk-turn1.xirsys.com'] },
+        {
+          username:
+            'aX_0HogGPHRGNvdzUm4KbELKRKa2e1-XXU7ykTjLzxPvYGtToLCCxE85kSodQr4uAAAAAGh001hkbHVvbmd0YQ==',
+          credential: '3e8fc950-6098-11f0-9c7a-0242ac120004',
+          urls: [
+            'turn:hk-turn1.xirsys.com:80?transport=udp',
+            'turn:hk-turn1.xirsys.com:3478?transport=udp',
+            'turn:hk-turn1.xirsys.com:80?transport=tcp',
+            'turn:hk-turn1.xirsys.com:3478?transport=tcp',
+            'turns:hk-turn1.xirsys.com:443?transport=tcp',
+            'turns:hk-turn1.xirsys.com:5349?transport=tcp',
+          ],
+        },
+        { urls: 'stun:stun.l.google.com:19302' },
+      ],
     });
 
     pc.ontrack = (e) => {
