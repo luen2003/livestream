@@ -313,7 +313,7 @@ export default function Broadcaster() {
           </div>
 
           <div style={{ marginTop: 10, display: 'flex', gap: 10 }}>
-            <button onClick={toggleVideo}>{videoEnabled ? 'Tắt hình (Đen)' : 'Bật hình'}</button>
+            <button onClick={toggleVideo}>{videoEnabled ? 'Tắt hình' : 'Bật hình'}</button>
             <button onClick={toggleAudio}>{audioEnabled ? 'Tắt tiếng' : 'Bật tiếng'}</button>
           </div>
           <Chat broadcasterId={broadcasterId} />
