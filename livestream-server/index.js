@@ -40,7 +40,17 @@ if (process.env.NODE_ENV === 'production') {
 
 io.on('connection', (socket) => {
   console.log('New connection:', socket.id);
-
+socket.on('stream-ended', (broadcasterId) => {
+    const viewersInStream = viewers[broadcasterId] || [];
+    viewersInStream.forEach((viewerId) => {
+      io.to(viewerId).emit('stream-ended', broadcasterId);
+    });
+    // Xóa dữ liệu
+    if (broadcasters[broadcasterId]) {
+      delete broadcasters[broadcasterId];
+      io.emit('broadcastersList', Object.values(broadcasters));
+    }
+  });
   socket.on('setUserName', (userName) => {
     users[socket.id] = userName || 'Unknown';
   });

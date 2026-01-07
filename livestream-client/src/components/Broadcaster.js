@@ -14,7 +14,6 @@ export default function Broadcaster() {
   const [error, setError] = useState('');
   const [viewerCount, setViewerCount] = useState(0);
   const [videoSource, setVideoSource] = useState('camera'); // camera | screen | both
-  const [broadcasterId, setBroadcasterId] = useState('');
 
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [audioEnabled, setAudioEnabled] = useState(true);
@@ -113,12 +112,18 @@ export default function Broadcaster() {
     socket.emit('media-state-changed', { broadcasterId: socket.id, videoEnabled, audioEnabled: newState });
   };
 
+  // Stop streaming and notify viewers
+  const stopStreaming = () => {
+    socket.emit('stream-ended', socket.id);
+    setIsStreaming(false);
+    stopAll();
+  };
+
   // Start streaming logic
   useEffect(() => {
     if (!isStreaming) return;
 
     socket.emit('broadcaster', { livestreamName: streamName, userName });
-    setBroadcasterId(socket.id);
 
     // Lấy stream ban đầu
     getMediaStream(videoSource);
@@ -212,7 +217,7 @@ export default function Broadcaster() {
           >
             <option value="camera">Chỉ Camera</option>
             <option value="screen">Chỉ Màn hình</option>
-            <option value="both">Cả 2 (Screen chính, Cam phụ)</option>
+            <option value="both">Cả 2 (Chia đôi màn hình)</option>
           </select>
           {error && <div style={{ color: 'red', marginBottom: 8 }}>{error}</div>}
           <button
@@ -224,20 +229,14 @@ export default function Broadcaster() {
         </div>
       ) : (
         <div>
-          {/* HEADER: Nút Trở về và Thông tin Stream */}
+          {/* HEADER */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', marginBottom: 10, gap: 5 }}>
             <button
               onClick={() => window.location.reload()}
               style={{
-                background: '#6c757d',
-                color: 'white',
-                border: 'none',
-                padding: '8px 16px',
-                borderRadius: '4px',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '5px'
+                background: '#6c757d', color: 'white', border: 'none',
+                padding: '8px 16px', borderRadius: '4px', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '5px'
               }}
             >
               ⬅ Trở về
@@ -247,114 +246,109 @@ export default function Broadcaster() {
             </div>
           </div>
 
-
-          {/* Controls thay đổi chế độ khi đang live */}
+          {/* CONTROLS */}
           <div style={{ marginBottom: 10, display: 'flex', gap: 10 }}>
             <button
               disabled={videoSource === 'camera'}
               onClick={() => switchMode('camera')}
-              style={{ flex: 1, background: videoSource === 'camera' ? '#ccc' : '#e6f7ff' }}
+              style={{ flex: 1, background: videoSource === 'camera' ? '#ccc' : '#e6f7ff', cursor: 'pointer', padding: 5 }}
             >
               📷 Camera
             </button>
             <button
               disabled={videoSource === 'screen'}
               onClick={() => switchMode('screen')}
-              style={{ flex: 1, background: videoSource === 'screen' ? '#ccc' : '#e6f7ff' }}
+              style={{ flex: 1, background: videoSource === 'screen' ? '#ccc' : '#e6f7ff', cursor: 'pointer', padding: 5 }}
             >
               🖥 Screen
             </button>
             <button
               disabled={videoSource === 'both'}
               onClick={() => switchMode('both')}
-              style={{ flex: 1, background: videoSource === 'both' ? '#ccc' : '#e6f7ff' }}
+              style={{ flex: 1, background: videoSource === 'both' ? '#ccc' : '#e6f7ff', cursor: 'pointer', padding: 5 }}
             >
               📷 + 🖥 Both
             </button>
           </div>
 
-          <div style={{ position: 'relative', width: '100%', background: '#000', minHeight: '400px', borderRadius: 8, overflow: 'hidden' }}>
+          {/* VIDEO CONTAINER */}
+          <div style={{ 
+            position: 'relative', 
+            width: '100%', 
+            background: '#000', 
+            height: '80vh',      // Chiều cao cố định lớn để chia tỷ lệ
+            borderRadius: 8, 
+            overflow: 'hidden',
+            display: 'flex',     // Sử dụng Flexbox
+            flexDirection: 'column', // Xếp dọc
+            gap: '10px'          // Khoảng cách giữa 2 video
+          }}>
             {/* Status Overlay */}
             <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 10, display: 'flex', gap: 10 }}>
               {!videoEnabled && <span style={{ background: 'red', color: 'white', padding: '4px 8px', borderRadius: 4 }}>📷 Cam Off</span>}
               {!audioEnabled && <span style={{ background: 'red', color: 'white', padding: '4px 8px', borderRadius: 4 }}>🔇 Mic Off</span>}
             </div>
 
-            {/* Render Video based on mode */}
-            {/* 1. Camera Mode: Show localCameraVideo full */}
+            {/* --- LOGIC RENDER VIDEO --- */}
+            
+            {/* 1. Camera Mode */}
             {videoSource === 'camera' && (
-              <video ref={localCameraVideo} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              <div style={{ flex: 1, width: '100%', overflow: 'hidden' }}>
+                <video ref={localCameraVideo} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              </div>
             )}
 
-            {/* 2. Screen Mode: Show localScreenVideo full */}
+            {/* 2. Screen Mode */}
             {videoSource === 'screen' && (
-              <video ref={localScreenVideo} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              <div style={{ flex: 1, width: '100%', overflow: 'hidden' }}>
+                <video ref={localScreenVideo} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              </div>
             )}
 
-            {/* 3. Both Mode: Screen Full, Camera PIP */}
+            {/* 3. Both Mode (Chia đôi: Trên Screen, Dưới Camera) */}
             {videoSource === 'both' && (
               <>
-                <video ref={localScreenVideo} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
-                <video
-                  ref={localCameraVideo}
-                  autoPlay muted playsInline
-                  style={{
-                    width: '25%',
-                    position: 'absolute',
-                    bottom: 10, right: 10,
-                    border: '2px solid white',
-                    borderRadius: 8,
-                    boxShadow: '0 4px 8px rgba(0,0,0,0.5)',
-                    objectFit: 'cover'
-                  }}
-                />
+                <div style={{ flex: 1, width: '100%', overflow: 'hidden', background: '#1a1a1a' }}>
+                   <video ref={localScreenVideo} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                </div>
+                <div style={{ flex: 1, width: '100%', overflow: 'hidden', background: '#1a1a1a' }}>
+                   <video ref={localCameraVideo} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+                </div>
               </>
             )}
           </div>
 
-<div style={{ marginTop: 10, display: 'flex', gap: 10 }}>
-  <button
-    onClick={toggleVideo}
-    style={{
-      flex: 1,
-      padding: '10px 0',
-      fontSize: 16,
-      borderRadius: 8,
-      border: 'none',
-      cursor: 'pointer',
-      backgroundColor: videoEnabled ? '#52c41a' : '#ff4d4f', // xanh khi bật, đỏ khi tắt
-      color: 'white',
-      transition: 'all 0.3s ease',
-      boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-    }}
-    onMouseEnter={e => e.currentTarget.style.opacity = 0.85}
-    onMouseLeave={e => e.currentTarget.style.opacity = 1}
-  >
-    {videoEnabled ? '📷 Tắt hình' : '📷 Bật hình'}
-  </button>
+          <div style={{ marginTop: 10, display: 'flex', gap: 10 }}>
+            <button
+              onClick={toggleVideo}
+              style={{
+                flex: 1, padding: '10px 0', fontSize: 16, borderRadius: 8, border: 'none', cursor: 'pointer',
+                backgroundColor: videoEnabled ? '#52c41a' : '#ff4d4f', color: 'white',
+              }}
+            >
+              {videoEnabled ? '📷 Tắt hình' : '📷 Bật hình'}
+            </button>
+            <button
+              onClick={toggleAudio}
+              style={{
+                flex: 1, padding: '10px 0', fontSize: 16, borderRadius: 8, border: 'none', cursor: 'pointer',
+                backgroundColor: audioEnabled ? '#1890ff' : '#ff4d4f', color: 'white',
+              }}
+            >
+              {audioEnabled ? '🔇 Tắt tiếng' : '🔊Bật tiếng'}
+            </button>
+          </div>
 
-  <button
-    onClick={toggleAudio}
-    style={{
-      flex: 1,
-      padding: '10px 0',
-      fontSize: 16,
-      borderRadius: 8,
-      border: 'none',
-      cursor: 'pointer',
-      backgroundColor: audioEnabled ? '#1890ff' : '#ff4d4f',
-      color: 'white',
-      transition: 'all 0.3s ease',
-      boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-    }}
-    onMouseEnter={e => e.currentTarget.style.opacity = 0.85}
-    onMouseLeave={e => e.currentTarget.style.opacity = 1}
-  >
-    {audioEnabled ? '🔇 Tắt tiếng' : '🔊Bật tiếng'}
-  </button>
-</div>
-
-          <Chat broadcasterId={broadcasterId} />
+          <Chat broadcasterId={socket.id} />
+          <button
+            onClick={stopStreaming}
+            style={{
+              marginTop: 10, backgroundColor: '#ff4d4f', color: 'white', border: 'none',
+              padding: '10px 20px', cursor: 'pointer', width: '100%'
+            }}
+          >
+            Dừng Livestream
+          </button>
         </div>
       )}
     </div>
