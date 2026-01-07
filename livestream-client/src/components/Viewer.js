@@ -155,17 +155,7 @@ export default function Viewer({ broadcasterId }) {
         </div>
       ) : (
         <div>
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', marginBottom: 10, gap: 5 }}>
-            <button
-              onClick={() => window.location.href = '/'}
-              style={{
-                background: '#6c757d', color: 'white', border: 'none',
-                padding: '8px 16px', borderRadius: '4px', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: '5px'
-              }}
-            >
-              ⬅ Rời khỏi
-            </button>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', marginBottom: 10, gap: 5 }}>          
             <div style={{ fontSize: 14 }}>
                Đang xem livestream | <b>Viewers: {viewerCount}</b>
             </div>

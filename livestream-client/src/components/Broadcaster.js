@@ -244,16 +244,7 @@ export default function Broadcaster() {
         <div>
           {/* HEADER */}
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', marginBottom: 10, gap: 5 }}>
-            <button
-              onClick={() => window.location.reload()}
-              style={{
-                background: '#6c757d', color: 'white', border: 'none',
-                padding: '8px 16px', borderRadius: '4px', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', gap: '5px'
-              }}
-            >
-              ⬅ Trở về
-            </button>
+
             <div style={{ fontSize: 14 }}>
               Tên livestream: <b>{streamName}</b> | Người livestream: {userName} | Số người xem: {viewerCount}
             </div>

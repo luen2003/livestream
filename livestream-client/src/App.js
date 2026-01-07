@@ -7,7 +7,8 @@ function App() {
   const [role, setRole] = useState(null);
 
   const handleBack = () => {
-    setRole(null);
+    // setRole(null);
+    window.location.reload();
   };
 
   const buttonStyle = {
@@ -41,13 +42,20 @@ function App() {
         </div>
       )}
 
-      {/* {role && (
+       {role && (
         <div style={{ textAlign: 'left', marginBottom: 20 }}>
-          <button style={backButtonStyle} onClick={handleBack}>
-            Trở về
-          </button>
+            <button
+              onClick={() => window.location.reload()}
+              style={{
+                background: '#6c757d', color: 'white', border: 'none',
+                padding: '8px 16px', borderRadius: '4px', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: '5px'
+              }}
+            >
+              ⬅ Trở về
+            </button>
         </div>
-      )} */}
+      )} 
 
       {role === 'broadcaster' && <Broadcaster />}
       {role === 'viewer' && <LiveStreamList />}
