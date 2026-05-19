@@ -1085,9 +1085,24 @@ export default function Broadcaster() {
   const [facingMode, setFacingMode] = useState('user'); // Dùng cho UI
   const facingModeRef = useRef('user'); // Dùng ref để getMediaStream bắt được ngay lập tức giá trị mới
 
-  useEffect(() => {
+  const audioContextRef = useRef(null);
+  const audioDestinationRef = useRef(null);
+  const audioSourceRef = useRef(null);
+
+useEffect(() => {
     canvasRef.current = document.createElement('canvas');
-    return () => stopAll();
+    
+    // Khởi tạo Audio Proxy
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    audioContextRef.current = new AudioContext();
+    audioDestinationRef.current = audioContextRef.current.createMediaStreamDestination();
+
+    return () => {
+      stopAll();
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close();
+      }
+    };
   }, []);
 
   const stopAll = () => {
@@ -1103,20 +1118,22 @@ export default function Broadcaster() {
     currentStreams.current = {};
   };
 
-  const drawBothStreamsToCanvas = (screenVideo, cameraVideo, width, height) => {
+const drawToCanvas = (mode, screenVideo, cameraVideo, width = 1280, height = 720) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext('2d');
 
-    // 1. Tạo một kịch bản cho Web Worker (chạy nhịp 30fps)
+    if (workerRef.current) {
+      workerRef.current.postMessage('stop');
+      workerRef.current.terminate();
+    }
+
     const workerCode = `
       let timer;
       self.onmessage = function(e) {
         if (e.data === 'start') {
-          // Tính toán ~30 khung hình / giây (1000ms / 30 = 33.3ms)
           timer = setInterval(() => self.postMessage('tick'), 33);
         } else if (e.data === 'stop') {
           clearInterval(timer);
@@ -1124,25 +1141,26 @@ export default function Broadcaster() {
       };
     `;
 
-    // 2. Kích hoạt Web Worker
     const blob = new Blob([workerCode], { type: 'application/javascript' });
-    const workerUrl = URL.createObjectURL(blob);
-    const worker = new Worker(workerUrl);
+    const worker = new Worker(URL.createObjectURL(blob));
 
-    // 3. Lắng nghe nhịp đập từ Worker để vẽ Canvas
     worker.onmessage = () => {
       if (!canvas || !ctx) return;
 
-      // Vẽ luồng màn hình làm nền chính
-      if (screenVideo && screenVideo.readyState === screenVideo.HAVE_ENOUGH_DATA) {
+      // Xóa nền đen
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, width, height);
+
+      // Xử lý vẽ theo Mode
+      if ((mode === 'screen' || mode === 'both') && screenVideo && screenVideo.readyState >= 2) {
         ctx.drawImage(screenVideo, 0, 0, width, height);
-      } else {
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(0, 0, width, height);
       }
 
-      // Vẽ luồng camera làm khung nhỏ đè lên góc phải
-      if (cameraVideo && cameraVideo.readyState === cameraVideo.HAVE_ENOUGH_DATA) {
+      if (mode === 'camera' && cameraVideo && cameraVideo.readyState >= 2) {
+        ctx.drawImage(cameraVideo, 0, 0, width, height);
+      }
+
+      if (mode === 'both' && cameraVideo && cameraVideo.readyState >= 2) {
         const camWidth = width * 0.25;
         const camHeight = camWidth * (3 / 4);
         const padding = 20;
@@ -1156,31 +1174,33 @@ export default function Broadcaster() {
       }
     };
 
-    // Bắt đầu nhịp gõ
     worker.postMessage('start');
     workerRef.current = worker;
   };
 
-  const startRecording = (streams, mode) => {
-    let targetStream;
-
-    if (mode === 'both') {
-      setTimeout(() => {
-        if (!canvasRef.current) return;
-        const canvasVideoTrack = canvasRef.current.captureStream(30).getVideoTracks()[0];
-        const cameraAudioTrack = streams.camera ? streams.camera.getAudioTracks()[0] : null;
-
-        const combinedTracks = [];
-        if (canvasVideoTrack) combinedTracks.push(canvasVideoTrack);
-        if (cameraAudioTrack) combinedTracks.push(cameraAudioTrack);
-
-        targetStream = new MediaStream(combinedTracks);
-        initMediaRecorder(targetStream);
-      }, 1000);
-    } else {
-      targetStream = streams[mode === 'camera' ? 'camera' : 'screen'];
-      initMediaRecorder(targetStream);
+  const connectAudioToProxy = (stream) => {
+    if (audioSourceRef.current) {
+      audioSourceRef.current.disconnect();
+      audioSourceRef.current = null;
     }
+    if (stream.getAudioTracks().length > 0) {
+      if (audioContextRef.current.state === 'suspended') {
+        audioContextRef.current.resume(); // Đánh thức AudioContext nếu trình duyệt chặn
+      }
+      audioSourceRef.current = audioContextRef.current.createMediaStreamSource(stream);
+      audioSourceRef.current.connect(audioDestinationRef.current);
+    }
+  };
+
+  const startProxyRecording = () => {
+    if (!canvasRef.current || !audioDestinationRef.current) return;
+    
+    // Lấy luồng ổn định từ Canvas và Audio Proxy (luôn không đổi ID)
+    const canvasTrack = canvasRef.current.captureStream(30).getVideoTracks()[0];
+    const audioTrack = audioDestinationRef.current.stream.getAudioTracks()[0];
+    
+    const proxyStream = new MediaStream([canvasTrack, audioTrack]);
+    initMediaRecorder(proxyStream);
   };
 
   const initMediaRecorder = (streamToRecord) => {
@@ -1201,12 +1221,9 @@ export default function Broadcaster() {
 
   const getMediaStream = async (source) => {
     try {
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        mediaRecorderRef.current.stop();
-      }
-
       stopAll();
       let newStreams = {};
+      let activeStreamForAudio = null;
 
       if (source === 'camera') {
         const cam = await navigator.mediaDevices.getUserMedia({
@@ -1214,17 +1231,17 @@ export default function Broadcaster() {
           audio: true
         });
         newStreams = { camera: cam };
+        activeStreamForAudio = cam;
         if (localCameraVideo.current) localCameraVideo.current.srcObject = cam;
       } else if (source === 'screen') {
         const scr = await navigator.mediaDevices.getDisplayMedia({ video: true });
         const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
-
         const combinedStream = new MediaStream([
           ...scr.getVideoTracks(),
           ...mic.getAudioTracks()
         ]);
-
         newStreams = { screen: combinedStream };
+        activeStreamForAudio = combinedStream;
         if (localScreenVideo.current) localScreenVideo.current.srcObject = combinedStream;
       } else if (source === 'both') {
         const scr = await navigator.mediaDevices.getDisplayMedia({ video: true });
@@ -1233,15 +1250,21 @@ export default function Broadcaster() {
           audio: true
         });
         newStreams = { screen: scr, camera: cam };
-
+        activeStreamForAudio = cam; 
         if (localScreenVideo.current) localScreenVideo.current.srcObject = scr;
         if (localCameraVideo.current) localCameraVideo.current.srcObject = cam;
-
-        drawBothStreamsToCanvas(localScreenVideo.current, localCameraVideo.current, 1280, 720);
       }
 
       currentStreams.current = newStreams;
-      startRecording(newStreams, source);
+
+      // Đẩy âm thanh và hình ảnh vào Proxy
+      if (activeStreamForAudio) connectAudioToProxy(activeStreamForAudio);
+      drawToCanvas(source, localScreenVideo.current, localCameraVideo.current, 1280, 720);
+
+      // CHỈ khởi tạo quay phim 1 LẦN DUY NHẤT
+      if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
+        setTimeout(() => startProxyRecording(), 1000); // Chờ 1s để worker dựng hình frame đầu
+      }
 
       return newStreams;
     } catch (err) {
