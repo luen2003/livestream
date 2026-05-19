@@ -11,7 +11,7 @@ export default function Broadcaster() {
   const mediaRecorderRef = useRef(null);
   const recordedChunksRef = useRef([]);
   const canvasRef = useRef(null);
-  const workerRef = useRef(null); 
+  const workerRef = useRef(null);
 
   const [streamName, setStreamName] = useState('');
   const [userName, setUserName] = useState('');
@@ -24,8 +24,8 @@ export default function Broadcaster() {
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [recordedVideoUrl, setRecordedVideoUrl] = useState(null);
 
-  const [facingMode, setFacingMode] = useState('user'); 
-  const facingModeRef = useRef('user'); 
+  const [facingMode, setFacingMode] = useState('user');
+  const facingModeRef = useRef('user');
 
   const audioContextRef = useRef(null);
   const audioDestinationRef = useRef(null);
@@ -122,8 +122,8 @@ export default function Broadcaster() {
       }
 
       if (mode === 'both' && cameraVideo && cameraVideo.readyState >= 2) {
-        const camWidth = width * 0.3; 
-        const camHeight = camWidth * (height / width); 
+        const camWidth = width * 0.3;
+        const camHeight = camWidth * (height / width);
         const padding = 20;
         const x = width - camWidth - padding;
         const y = height - camHeight - padding;
@@ -146,7 +146,7 @@ export default function Broadcaster() {
     }
     if (stream.getAudioTracks().length > 0) {
       if (audioContextRef.current.state === 'suspended') {
-        audioContextRef.current.resume(); 
+        audioContextRef.current.resume();
       }
       audioSourceRef.current = audioContextRef.current.createMediaStreamSource(stream);
       audioSourceRef.current.connect(audioDestinationRef.current);
@@ -219,14 +219,15 @@ export default function Broadcaster() {
 
       if (activeStreamForAudio) connectAudioToProxy(activeStreamForAudio);
 
-      // Setup độ phân giải linh hoạt dựa trên màn hình PC / Mobile
+
       const canvasWidth = isPortrait ? 720 : 1280;
-      const canvasHeight = isPortrait ? 1280 : 720;
+      const canvasHeight = isPortrait ? 1280 : 960;
+
 
       drawToCanvas(source, localScreenVideo.current, localCameraVideo.current, canvasWidth, canvasHeight);
 
       if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
-        setTimeout(() => startProxyRecording(), 1000); 
+        setTimeout(() => startProxyRecording(), 1000);
       }
 
       return newStreams;
@@ -452,9 +453,10 @@ export default function Broadcaster() {
           <div style={{
             position: 'relative',
             width: '100%',
-            // CHỈNH LẠI KHUNG UI: Tự động đổi tỷ lệ khung theo thiết bị dọc / ngang
-            aspectRatio: isPortrait ? '9/16' : '16/9',
-            maxHeight: '75vh',
+            maxWidth: isPortrait ? '100%' : '900px', // PC: Giới hạn chiều ngang để video không bị bành quá to
+            margin: '0 auto', // PC: Căn giữa khung video
+            aspectRatio: isPortrait ? '9/16' : '4/3', // PC: Đổi tỷ lệ 16/9 thành 4/3 để chiều dọc cao hơn
+            maxHeight: '100vh', // Nới thêm chiều cao tối đa để hiển thị to hơn
             background: '#000',
             borderRadius: 8,
             overflow: 'hidden'
