@@ -6,31 +6,47 @@ export default function Broadcaster() {
   const localScreenVideo = useRef();
   const localCameraVideo = useRef();
   const peerConnections = useRef({});
-  const currentStreams = useRef({}); 
-  
+  const currentStreams = useRef({});
+
   const mediaRecorderRef = useRef(null);
   const recordedChunksRef = useRef([]);
   const canvasRef = useRef(null);
-  const workerRef = useRef(null);
+  const workerRef = useRef(null); 
 
   const [streamName, setStreamName] = useState('');
   const [userName, setUserName] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState('');
   const [viewerCount, setViewerCount] = useState(0);
-  const [videoSource, setVideoSource] = useState('camera'); 
+  const [videoSource, setVideoSource] = useState('camera');
 
   const [videoEnabled, setVideoEnabled] = useState(true);
   const [audioEnabled, setAudioEnabled] = useState(true);
   const [recordedVideoUrl, setRecordedVideoUrl] = useState(null);
 
-  // KHÔI PHỤC: State và Ref để quản lý hướng Camera
-  const [facingMode, setFacingMode] = useState('user');
-  const facingModeRef = useRef('user');
+  const [facingMode, setFacingMode] = useState('user'); 
+  const facingModeRef = useRef('user'); 
+
+  const audioContextRef = useRef(null);
+  const audioDestinationRef = useRef(null);
+  const audioSourceRef = useRef(null);
+
+  // Nhận diện màn hình đang là dọc (Mobile) hay ngang (PC)
+  const isPortrait = typeof window !== 'undefined' && window.innerHeight > window.innerWidth;
 
   useEffect(() => {
     canvasRef.current = document.createElement('canvas');
-    return () => stopAll();
+
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    audioContextRef.current = new AudioContext();
+    audioDestinationRef.current = audioContextRef.current.createMediaStreamDestination();
+
+    return () => {
+      stopAll();
+      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+        audioContextRef.current.close();
+      }
+    };
   }, []);
 
   const stopAll = () => {
@@ -45,13 +61,36 @@ export default function Broadcaster() {
     currentStreams.current = {};
   };
 
-  const drawBothStreamsToCanvas = (screenVideo, cameraVideo, width, height) => {
+  const drawToCanvas = (mode, screenVideo, cameraVideo, width = 1280, height = 720) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    
     canvas.width = width;
     canvas.height = height;
     const ctx = canvas.getContext('2d');
+
+    if (workerRef.current) {
+      workerRef.current.postMessage('stop');
+      workerRef.current.terminate();
+    }
+
+    // FIX LÕI ĐEN 2 BÊN: Hàm vẽ mô phỏng object-fit: cover để video luôn tràn viền
+    const drawCover = (context, video, x, y, w, h) => {
+      if (!video.videoWidth || !video.videoHeight) return;
+      const videoRatio = video.videoWidth / video.videoHeight;
+      const targetRatio = w / h;
+      let sWidth = video.videoWidth;
+      let sHeight = video.videoHeight;
+      let sx = 0, sy = 0;
+
+      if (videoRatio > targetRatio) {
+        sWidth = sHeight * targetRatio;
+        sx = (video.videoWidth - sWidth) / 2;
+      } else {
+        sHeight = sWidth / targetRatio;
+        sy = (video.videoHeight - sHeight) / 2;
+      }
+      context.drawImage(video, sx, sy, sWidth, sHeight, x, y, w, h);
+    };
 
     const workerCode = `
       let timer;
@@ -63,22 +102,26 @@ export default function Broadcaster() {
         }
       };
     `;
-    
+
     const blob = new Blob([workerCode], { type: 'application/javascript' });
     const worker = new Worker(URL.createObjectURL(blob));
 
     worker.onmessage = () => {
       if (!canvas || !ctx) return;
 
-      if (screenVideo && screenVideo.readyState === screenVideo.HAVE_ENOUGH_DATA) {
-        ctx.drawImage(screenVideo, 0, 0, width, height);
-      } else {
-        ctx.fillStyle = '#000000';
-        ctx.fillRect(0, 0, width, height);
+      ctx.fillStyle = '#000000';
+      ctx.fillRect(0, 0, width, height);
+
+      // Sử dụng drawCover thay vì drawImage bình thường
+      if ((mode === 'screen' || mode === 'both') && screenVideo && screenVideo.readyState >= 2) {
+        drawCover(ctx, screenVideo, 0, 0, width, height);
       }
 
-      if (cameraVideo && cameraVideo.readyState === cameraVideo.HAVE_ENOUGH_DATA) {
-        // FIX SIZE MOBILE: Tỷ lệ camera đè tự động co giãn theo width/height
+      if (mode === 'camera' && cameraVideo && cameraVideo.readyState >= 2) {
+        drawCover(ctx, cameraVideo, 0, 0, width, height);
+      }
+
+      if (mode === 'both' && cameraVideo && cameraVideo.readyState >= 2) {
         const camWidth = width * 0.3; 
         const camHeight = camWidth * (height / width); 
         const padding = 20;
@@ -88,7 +131,7 @@ export default function Broadcaster() {
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 4;
         ctx.strokeRect(x, y, camWidth, camHeight);
-        ctx.drawImage(cameraVideo, x, y, camWidth, camHeight);
+        drawCover(ctx, cameraVideo, x, y, camWidth, camHeight);
       }
     };
 
@@ -96,26 +139,28 @@ export default function Broadcaster() {
     workerRef.current = worker;
   };
 
-  const startRecording = (streams, mode) => {
-    let targetStream;
-    
-    if (mode === 'both') {
-      setTimeout(() => {
-        if (!canvasRef.current) return;
-        const canvasVideoTrack = canvasRef.current.captureStream(30).getVideoTracks()[0];
-        const cameraAudioTrack = streams.camera ? streams.camera.getAudioTracks()[0] : null;
-        
-        const combinedTracks = [];
-        if (canvasVideoTrack) combinedTracks.push(canvasVideoTrack);
-        if (cameraAudioTrack) combinedTracks.push(cameraAudioTrack);
-
-        targetStream = new MediaStream(combinedTracks);
-        initMediaRecorder(targetStream);
-      }, 1000); 
-    } else {
-      targetStream = streams[mode === 'camera' ? 'camera' : 'screen'];
-      initMediaRecorder(targetStream);
+  const connectAudioToProxy = (stream) => {
+    if (audioSourceRef.current) {
+      audioSourceRef.current.disconnect();
+      audioSourceRef.current = null;
     }
+    if (stream.getAudioTracks().length > 0) {
+      if (audioContextRef.current.state === 'suspended') {
+        audioContextRef.current.resume(); 
+      }
+      audioSourceRef.current = audioContextRef.current.createMediaStreamSource(stream);
+      audioSourceRef.current.connect(audioDestinationRef.current);
+    }
+  };
+
+  const startProxyRecording = () => {
+    if (!canvasRef.current || !audioDestinationRef.current) return;
+
+    const canvasTrack = canvasRef.current.captureStream(30).getVideoTracks()[0];
+    const audioTrack = audioDestinationRef.current.stream.getAudioTracks()[0];
+
+    const proxyStream = new MediaStream([canvasTrack, audioTrack]);
+    initMediaRecorder(proxyStream);
   };
 
   const initMediaRecorder = (streamToRecord) => {
@@ -127,7 +172,7 @@ export default function Broadcaster() {
           recordedChunksRef.current.push(e.data);
         }
       };
-      recorder.start(1000); 
+      recorder.start(1000);
       mediaRecorderRef.current = recorder;
     } catch (err) {
       console.error('Lỗi khi khởi tạo ghi hình:', err);
@@ -136,54 +181,54 @@ export default function Broadcaster() {
 
   const getMediaStream = async (source) => {
     try {
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-        mediaRecorderRef.current.stop();
-      }
-      
       stopAll();
       let newStreams = {};
+      let activeStreamForAudio = null;
 
       if (source === 'camera') {
-        // KHÔI PHỤC: Thêm facingMode
-        const cam = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: facingModeRef.current }, 
-          audio: true 
+        const cam = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: facingModeRef.current },
+          audio: true
         });
         newStreams = { camera: cam };
+        activeStreamForAudio = cam;
         if (localCameraVideo.current) localCameraVideo.current.srcObject = cam;
       } else if (source === 'screen') {
         const scr = await navigator.mediaDevices.getDisplayMedia({ video: true });
         const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
-
         const combinedStream = new MediaStream([
           ...scr.getVideoTracks(),
           ...mic.getAudioTracks()
         ]);
-
         newStreams = { screen: combinedStream };
+        activeStreamForAudio = combinedStream;
         if (localScreenVideo.current) localScreenVideo.current.srcObject = combinedStream;
       } else if (source === 'both') {
         const scr = await navigator.mediaDevices.getDisplayMedia({ video: true });
-        // KHÔI PHỤC: Thêm facingMode
-        const cam = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: facingModeRef.current }, 
-          audio: true 
+        const cam = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: facingModeRef.current },
+          audio: true
         });
         newStreams = { screen: scr, camera: cam };
-        
+        activeStreamForAudio = cam;
         if (localScreenVideo.current) localScreenVideo.current.srcObject = scr;
         if (localCameraVideo.current) localCameraVideo.current.srcObject = cam;
-
-        // FIX SIZE MOBILE: Tự nhận diện màn hình dọc hay ngang để vẽ Canvas
-        const isPortrait = window.innerHeight > window.innerWidth;
-        const canvasWidth = isPortrait ? 720 : 1280;
-        const canvasHeight = isPortrait ? 1280 : 720;
-        drawBothStreamsToCanvas(localScreenVideo.current, localCameraVideo.current, canvasWidth, canvasHeight);
       }
 
       currentStreams.current = newStreams;
-      startRecording(newStreams, source);
-      
+
+      if (activeStreamForAudio) connectAudioToProxy(activeStreamForAudio);
+
+      // Setup độ phân giải linh hoạt dựa trên màn hình PC / Mobile
+      const canvasWidth = isPortrait ? 720 : 1280;
+      const canvasHeight = isPortrait ? 1280 : 720;
+
+      drawToCanvas(source, localScreenVideo.current, localCameraVideo.current, canvasWidth, canvasHeight);
+
+      if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
+        setTimeout(() => startProxyRecording(), 1000); 
+      }
+
       return newStreams;
     } catch (err) {
       console.error('Error getting media:', err);
@@ -234,18 +279,18 @@ export default function Broadcaster() {
     socket.emit('media-state-changed', { broadcasterId: socket.id, videoEnabled, audioEnabled: newState });
   };
 
-  // KHÔI PHỤC: Hàm đổi Camera
   const flipCamera = async () => {
     const newMode = facingModeRef.current === 'user' ? 'environment' : 'user';
     facingModeRef.current = newMode;
     setFacingMode(newMode);
+
     await switchMode(videoSource);
   };
 
   const stopStreaming = () => {
     socket.emit('stream-ended', socket.id);
     setIsStreaming(false);
-    
+
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
     }
@@ -268,23 +313,23 @@ export default function Broadcaster() {
 
     socket.on('watcher', async (watcherId) => {
       const pc = new RTCPeerConnection({
-        iceServers:  [
-        { urls: ['stun:hk-turn1.xirsys.com'] },
-        {
-          username:
-            'aX_0HogGPHRGNvdzUm4KbELKRKa2e1-XXU7ykTjLzxPvYGtToLCCxE85kSodQr4uAAAAAGh001hkbHVvbmd0YQ==',
-          credential: '3e8fc950-6098-11f0-9c7a-0242ac120004',
-          urls: [
-            'turn:hk-turn1.xirsys.com:80?transport=udp',
-            'turn:hk-turn1.xirsys.com:3478?transport=udp',
-            'turn:hk-turn1.xirsys.com:80?transport=tcp',
-            'turn:hk-turn1.xirsys.com:3478?transport=tcp',
-            'turns:hk-turn1.xirsys.com:443?transport=tcp',
-            'turns:hk-turn1.xirsys.com:5349?transport=tcp',
-          ],
-        },
-        { urls: 'stun:stun.l.google.com:19302' },
-      ],
+        iceServers: [
+          { urls: ['stun:hk-turn1.xirsys.com'] },
+          {
+            username:
+              'aX_0HogGPHRGNvdzUm4KbELKRKa2e1-XXU7ykTjLzxPvYGtToLCCxE85kSodQr4uAAAAAGh001hkbHVvbmd0YQ==',
+            credential: '3e8fc950-6098-11f0-9c7a-0242ac120004',
+            urls: [
+              'turn:hk-turn1.xirsys.com:80?transport=udp',
+              'turn:hk-turn1.xirsys.com:3478?transport=udp',
+              'turn:hk-turn1.xirsys.com:80?transport=tcp',
+              'turn:hk-turn1.xirsys.com:3478?transport=tcp',
+              'turns:hk-turn1.xirsys.com:443?transport=tcp',
+              'turns:hk-turn1.xirsys.com:5349?transport=tcp',
+            ],
+          },
+          { urls: 'stun:stun.l.google.com:19302' },
+        ],
       });
 
       peerConnections.current[watcherId] = pc;
@@ -356,14 +401,12 @@ export default function Broadcaster() {
             <option value="screen">Chỉ Màn hình</option>
             <option value="both">Cả 2 (Màn hình chính + Camera phụ)</option>
           </select>
-
-          {/* KHÔI PHỤC: Dropdown chọn hướng Camera ban đầu */}
           {videoSource !== 'screen' && (
             <select
               value={facingMode}
               onChange={(e) => {
                 setFacingMode(e.target.value);
-                facingModeRef.current = e.target.value; 
+                facingModeRef.current = e.target.value;
               }}
               style={{ width: '100%', marginBottom: 10, height: 45, fontSize: 16 }}
             >
@@ -378,13 +421,13 @@ export default function Broadcaster() {
           {recordedVideoUrl && (
             <div style={{ marginTop: 30, padding: 20, border: '2px dashed #10b981', borderRadius: 8, background: '#f9fafb' }}>
               <h3 style={{ color: '#10b981', marginBottom: 15 }}>✨ Livestream của bạn đã được lưu hoàn chỉnh!</h3>
-              <video 
-                src={recordedVideoUrl} 
-                controls 
-                style={{ width: '100%', borderRadius: 8, backgroundColor: '#000', marginBottom: 15 }} 
+              <video
+                src={recordedVideoUrl}
+                controls
+                style={{ width: '100%', borderRadius: 8, backgroundColor: '#000', marginBottom: 15 }}
               />
-              <a 
-                href={recordedVideoUrl} 
+              <a
+                href={recordedVideoUrl}
                 download={`Livestream_${streamName || 'Record'}.webm`}
                 style={{ display: 'block', textAlign: 'center', backgroundColor: '#10b981', color: 'white', padding: '10px', borderRadius: 4, textDecoration: 'none', fontWeight: 'bold' }}
               >
@@ -406,14 +449,14 @@ export default function Broadcaster() {
             <button disabled={videoSource === 'both'} onClick={() => switchMode('both')} style={{ flex: 1, padding: 5 }}>📷 + 🖥 Both</button>
           </div>
 
-          {/* FIX UI MOBILE: Dùng aspect ratio thay cho height cứng */}
-          <div style={{ 
-            position: 'relative', 
-            width: '100%', 
-            aspectRatio: '16/9',
+          <div style={{
+            position: 'relative',
+            width: '100%',
+            // CHỈNH LẠI KHUNG UI: Tự động đổi tỷ lệ khung theo thiết bị dọc / ngang
+            aspectRatio: isPortrait ? '9/16' : '16/9',
             maxHeight: '75vh',
-            background: '#000', 
-            borderRadius: 8, 
+            background: '#000',
+            borderRadius: 8,
             overflow: 'hidden'
           }}>
             <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 30, display: 'flex', gap: 10 }}>
@@ -421,22 +464,22 @@ export default function Broadcaster() {
               {!audioEnabled && <span style={{ background: 'red', color: 'white', padding: '4px 8px', borderRadius: 4 }}>🔇 Mic Off</span>}
             </div>
 
+            {/* CHỈNH LẠI OBJECT-FIT: Dùng cover để tràn viền 100% trên giao diện preview */}
             {videoSource === 'camera' && (
-               <video ref={localCameraVideo} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              <video ref={localCameraVideo} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             )}
 
             {videoSource === 'screen' && (
-               <video ref={localScreenVideo} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+              <video ref={localScreenVideo} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             )}
 
             {videoSource === 'both' && (
               <>
-                <video 
-                  ref={localScreenVideo} 
-                  autoPlay muted playsInline 
-                  style={{ width: '100%', height: '100%', objectFit: 'contain' }} 
+                <video
+                  ref={localScreenVideo}
+                  autoPlay muted playsInline
+                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                 />
-                {/* FIX UI MOBILE: Dùng tỷ lệ % cho camera nhỏ */}
                 <div style={{
                   position: 'absolute',
                   bottom: '5%',
@@ -450,11 +493,11 @@ export default function Broadcaster() {
                   zIndex: 20,
                   background: '#000'
                 }}>
-                   <video 
-                     ref={localCameraVideo} 
-                     autoPlay muted playsInline 
-                     style={{ width: '100%', height: '100%', objectFit: 'cover' }} 
-                   />
+                  <video
+                    ref={localCameraVideo}
+                    autoPlay muted playsInline
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
                 </div>
               </>
             )}
@@ -463,8 +506,6 @@ export default function Broadcaster() {
           <div style={{ marginTop: 10, display: 'flex', gap: 10 }}>
             <button onClick={toggleVideo} style={{ flex: 1, padding: '10px 0', backgroundColor: videoEnabled ? '#52c41a' : '#ff4d4f', color: 'white', border: 'none', borderRadius: 4 }}>{videoEnabled ? 'Tắt hình' : 'Bật hình'}</button>
             <button onClick={toggleAudio} style={{ flex: 1, padding: '10px 0', backgroundColor: audioEnabled ? '#1890ff' : '#ff4d4f', color: 'white', border: 'none', borderRadius: 4 }}>{audioEnabled ? 'Tắt tiếng' : 'Bật tiếng'}</button>
-            
-            {/* KHÔI PHỤC: Nút Đổi Lật Camera */}
             <button
               onClick={flipCamera}
               disabled={videoSource === 'screen'}
@@ -481,7 +522,6 @@ export default function Broadcaster() {
               {facingMode === 'user' ? 'Cam Trước' : 'Cam Sau'}
             </button>
           </div>
-          
           <Chat broadcasterId={socket.id} />
           <button onClick={stopStreaming} style={{ marginTop: 10, backgroundColor: '#ff4d4f', color: 'white', border: 'none', padding: '10px 20px', width: '100%' }}>Dừng Livestream</button>
         </div>
