@@ -456,7 +456,7 @@ export default function Broadcaster() {
             maxWidth: isPortrait ? '100%' : '900px',
             margin: '0 auto', 
             aspectRatio: isPortrait ? '9/16' : '4/3',
-            maxHeight: '80vh', 
+            maxHeight: '85vh', 
             background: '#000',
             borderRadius: 8,
             overflow: 'hidden'
