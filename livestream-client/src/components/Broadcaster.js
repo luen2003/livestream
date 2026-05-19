@@ -1089,9 +1089,9 @@ export default function Broadcaster() {
   const audioDestinationRef = useRef(null);
   const audioSourceRef = useRef(null);
 
-useEffect(() => {
+  useEffect(() => {
     canvasRef.current = document.createElement('canvas');
-    
+
     // Khởi tạo Audio Proxy
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     audioContextRef.current = new AudioContext();
@@ -1118,7 +1118,7 @@ useEffect(() => {
     currentStreams.current = {};
   };
 
-const drawToCanvas = (mode, screenVideo, cameraVideo, width = 1280, height = 720) => {
+  const drawToCanvas = (mode, screenVideo, cameraVideo, width = 1280, height = 720) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     canvas.width = width;
@@ -1194,11 +1194,11 @@ const drawToCanvas = (mode, screenVideo, cameraVideo, width = 1280, height = 720
 
   const startProxyRecording = () => {
     if (!canvasRef.current || !audioDestinationRef.current) return;
-    
+
     // Lấy luồng ổn định từ Canvas và Audio Proxy (luôn không đổi ID)
     const canvasTrack = canvasRef.current.captureStream(30).getVideoTracks()[0];
     const audioTrack = audioDestinationRef.current.stream.getAudioTracks()[0];
-    
+
     const proxyStream = new MediaStream([canvasTrack, audioTrack]);
     initMediaRecorder(proxyStream);
   };
@@ -1250,7 +1250,7 @@ const drawToCanvas = (mode, screenVideo, cameraVideo, width = 1280, height = 720
           audio: true
         });
         newStreams = { screen: scr, camera: cam };
-        activeStreamForAudio = cam; 
+        activeStreamForAudio = cam;
         if (localScreenVideo.current) localScreenVideo.current.srcObject = scr;
         if (localCameraVideo.current) localCameraVideo.current.srcObject = cam;
       }
@@ -1492,7 +1492,8 @@ const drawToCanvas = (mode, screenVideo, cameraVideo, width = 1280, height = 720
           <div style={{
             position: 'relative',
             width: '100%',
-            height: '80vh',
+            aspectRatio: '16/9', 
+            maxHeight: '75vh',  
             background: '#000',
             borderRadius: 8,
             overflow: 'hidden'
@@ -1521,12 +1522,13 @@ const drawToCanvas = (mode, screenVideo, cameraVideo, width = 1280, height = 720
                   autoPlay muted playsInline
                   style={{ width: '100%', height: '100%', objectFit: 'contain' }}
                 />
+                {/* Layer 2: Camera*/}
                 <div style={{
                   position: 'absolute',
-                  bottom: 20,
-                  right: 20,
-                  width: '200px',
-                  height: '150px',
+                  bottom: '5%',  
+                  right: '5%',   
+                  width: '28%', 
+                  aspectRatio: '3/4', 
                   borderRadius: 8,
                   overflow: 'hidden',
                   boxShadow: '0 4px 8px rgba(0,0,0,0.5)',
