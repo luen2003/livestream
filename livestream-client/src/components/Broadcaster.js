@@ -453,10 +453,10 @@ export default function Broadcaster() {
           <div style={{
             position: 'relative',
             width: '100%',
-            maxWidth: isPortrait ? '100%' : '900px', // PC: Giới hạn chiều ngang để video không bị bành quá to
-            margin: '0 auto', // PC: Căn giữa khung video
-            aspectRatio: isPortrait ? '9/16' : '4/3', // PC: Đổi tỷ lệ 16/9 thành 4/3 để chiều dọc cao hơn
-            maxHeight: '100vh', // Nới thêm chiều cao tối đa để hiển thị to hơn
+            maxWidth: isPortrait ? '100%' : '900px',
+            margin: '0 auto', 
+            aspectRatio: isPortrait ? '9/16' : '4/3',
+            maxHeight: '80vh', 
             background: '#000',
             borderRadius: 8,
             overflow: 'hidden'
