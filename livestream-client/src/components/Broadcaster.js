@@ -123,8 +123,8 @@ export default function Broadcaster() {
 
       if (mode === 'both' && cameraVideo && cameraVideo.readyState >= 2) {
         const camWidth = width * 0.3;
-        const camHeight = camWidth * (height / width);
-        const padding = 20;
+        const camHeight = camWidth * (3 / 4);        
+        const padding = 6;
         const x = width - camWidth - padding;
         const y = height - camHeight - padding;
 
@@ -484,10 +484,10 @@ export default function Broadcaster() {
                 />
                 <div style={{
                   position: 'absolute',
-                  bottom: '5%',
-                  right: '5%',
+                  bottom: '2px',
+                  right: '2px',
                   width: '28%',
-                  aspectRatio: '3/4',
+                  aspectRatio: '4/3',
                   borderRadius: 8,
                   overflow: 'hidden',
                   boxShadow: '0 4px 8px rgba(0,0,0,0.5)',
