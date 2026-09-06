@@ -1591,7 +1591,7 @@ export default function Broadcaster() {
                 '📷 + 🖥 Camera + Màn hình'}
             </b>
 
-            <span
+            {/* <span
               style={{
                 marginLeft: 8,
                 color: '#999',
@@ -1599,7 +1599,7 @@ export default function Broadcaster() {
             >
               (Không thể thay đổi khi
               đang livestream)
-            </span>
+            </span> */}
           </div>
 
           {/* =================================================
