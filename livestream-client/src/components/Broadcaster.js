@@ -648,7 +648,7 @@ export default function Broadcaster() {
       if (
         !mediaRecorderRef.current ||
         mediaRecorderRef.current.state ===
-          'inactive'
+        'inactive'
       ) {
         setTimeout(() => {
           startProxyRecording();
@@ -746,7 +746,7 @@ export default function Broadcaster() {
 
     const newMode =
       facingModeRef.current ===
-      'user'
+        'user'
         ? 'environment'
         : 'user';
 
@@ -835,7 +835,7 @@ export default function Broadcaster() {
               if (
                 sender.track &&
                 sender.track.kind ===
-                  'video'
+                'video'
               ) {
                 sender
                   .replaceTrack(
@@ -978,7 +978,7 @@ export default function Broadcaster() {
     if (
       mediaRecorderRef.current &&
       mediaRecorderRef.current.state !==
-        'inactive'
+      'inactive'
     ) {
       mediaRecorderRef.current.stop();
     }
@@ -1160,7 +1160,7 @@ export default function Broadcaster() {
     ) => {
       const pc =
         peerConnections.current[
-          id
+        id
         ];
 
       if (!pc) return;
@@ -1187,7 +1187,7 @@ export default function Broadcaster() {
     ) => {
       const pc =
         peerConnections.current[
-          id
+        id
         ];
 
       if (!pc) return;
@@ -1212,7 +1212,7 @@ export default function Broadcaster() {
       (id) => {
         const pc =
           peerConnections.current[
-            id
+          id
           ];
 
         if (pc) {
@@ -1402,47 +1402,47 @@ export default function Broadcaster() {
             }}
           >
             <option value="camera">
-              📷 Chỉ Camera
+              Chỉ Camera
             </option>
 
             <option value="screen">
-              🖥 Chỉ Màn hình
+              Chỉ Màn hình
             </option>
 
             <option value="both">
-              📷 + 🖥 Cả 2
+              Cả Camera + Màn hình
             </option>
           </select>
 
           {/* Camera trước/sau */}
           {videoSource !==
             'screen' && (
-            <select
-              value={facingMode}
-              onChange={(e) => {
-                setFacingMode(
-                  e.target.value
-                );
+              <select
+                value={facingMode}
+                onChange={(e) => {
+                  setFacingMode(
+                    e.target.value
+                  );
 
-                facingModeRef.current =
-                  e.target.value;
-              }}
-              style={{
-                width: '100%',
-                marginBottom: 10,
-                height: 45,
-                fontSize: 16,
-              }}
-            >
-              <option value="user">
-                Sử dụng Camera Trước
-              </option>
+                  facingModeRef.current =
+                    e.target.value;
+                }}
+                style={{
+                  width: '100%',
+                  marginBottom: 10,
+                  height: 45,
+                  fontSize: 16,
+                }}
+              >
+                <option value="user">
+                  Sử dụng Camera Trước
+                </option>
 
-              <option value="environment">
-                Sử dụng Camera Sau
-              </option>
-            </select>
-          )}
+                <option value="environment">
+                  Sử dụng Camera Sau
+                </option>
+              </select>
+            )}
 
           {error && (
             <div
@@ -1516,10 +1516,9 @@ export default function Broadcaster() {
                 href={
                   recordedVideoUrl
                 }
-                download={`Livestream_${
-                  streamName ||
+                download={`Livestream_${streamName ||
                   'Record'
-                }.webm`}
+                  }.webm`}
                 style={{
                   display: 'block',
                   textAlign:
@@ -1570,36 +1569,39 @@ export default function Broadcaster() {
               marginBottom: 10,
               padding: '8px 12px',
               background:
-                '#f5f5f5',
+                '#008cff',
               borderRadius: 6,
               fontSize: 14,
-              color: '#555',
+              color: '#fff',
+              fontWeight: 'bold'
             }}
           >
             Chế độ:{' '}
-            <b>
+            <span>
+              {/* <b> */}
               {videoSource ===
                 'camera' &&
-                '📷 Camera'}
+                'Camera'}
 
               {videoSource ===
                 'screen' &&
-                '🖥 Màn hình'}
+                'Màn hình'}
 
               {videoSource ===
                 'both' &&
-                '📷 + 🖥 Camera + Màn hình'}
-            </b>
+                'Cả Camera + Màn hình'}
+              {/* </b> */}
+            </span>
 
-            {/* <span
+            <span
               style={{
                 marginLeft: 8,
-                color: '#999',
+                color: '#fff',
               }}
             >
               (Không thể thay đổi khi
               đang livestream)
-            </span> */}
+            </span>
           </div>
 
           {/* =================================================
@@ -1655,7 +1657,7 @@ export default function Broadcaster() {
                       4,
                   }}
                 >
-                  📷 Cam Off
+                  Cam Off
                 </span>
               )}
 
@@ -1683,21 +1685,21 @@ export default function Broadcaster() {
 
             {videoSource ===
               'camera' && (
-              <video
-                ref={
-                  localCameraVideo
-                }
-                autoPlay
-                muted
-                playsInline
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit:
-                    'cover',
-                }}
-              />
-            )}
+                <video
+                  ref={
+                    localCameraVideo
+                  }
+                  autoPlay
+                  muted
+                  playsInline
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit:
+                      'cover',
+                  }}
+                />
+              )}
 
             {/* =================================================
                 SCREEN
@@ -1705,29 +1707,6 @@ export default function Broadcaster() {
 
             {videoSource ===
               'screen' && (
-              <video
-                ref={
-                  localScreenVideo
-                }
-                autoPlay
-                muted
-                playsInline
-                style={{
-                  width: '100%',
-                  height: '100%',
-                  objectFit:
-                    'cover',
-                }}
-              />
-            )}
-
-            {/* =================================================
-                BOTH
-            ================================================= */}
-
-            {videoSource ===
-              'both' && (
-              <>
                 <video
                   ref={
                     localScreenVideo
@@ -1742,48 +1721,71 @@ export default function Broadcaster() {
                       'cover',
                   }}
                 />
+              )}
 
-                <div
-                  style={{
-                    position:
-                      'absolute',
-                    bottom: '2px',
-                    right: '2px',
-                    width: '28%',
-                    aspectRatio:
-                      '4/3',
-                    borderRadius:
-                      8,
-                    overflow:
-                      'hidden',
-                    boxShadow:
-                      '0 4px 8px rgba(0,0,0,0.5)',
-                    border:
-                      '2px solid white',
-                    zIndex: 20,
-                    background:
-                      '#000',
-                  }}
-                >
+            {/* =================================================
+                BOTH
+            ================================================= */}
+
+            {videoSource ===
+              'both' && (
+                <>
                   <video
                     ref={
-                      localCameraVideo
+                      localScreenVideo
                     }
                     autoPlay
                     muted
                     playsInline
                     style={{
-                      width:
-                        '100%',
-                      height:
-                        '100%',
+                      width: '100%',
+                      height: '100%',
                       objectFit:
                         'cover',
                     }}
                   />
-                </div>
-              </>
-            )}
+
+                  <div
+                    style={{
+                      position:
+                        'absolute',
+                      bottom: '2px',
+                      right: '2px',
+                      width: '28%',
+                      aspectRatio:
+                        '4/3',
+                      borderRadius:
+                        8,
+                      overflow:
+                        'hidden',
+                      boxShadow:
+                        '0 4px 8px rgba(0,0,0,0.5)',
+                      border:
+                        '2px solid white',
+                      zIndex: 20,
+                      background:
+                        '#000',
+                    }}
+                  >
+                    <video
+                      ref={
+                        localCameraVideo
+                      }
+                      autoPlay
+                      muted
+                      playsInline
+                      style={{
+                        width:
+                          '100%',
+                        height:
+                          '100%',
+                        objectFit:
+                          'cover',
+                      }}
+                    />
+                  </div>
+                </>
+              )}
           </div>
 
           {/* =================================================
@@ -1869,12 +1871,12 @@ export default function Broadcaster() {
                   '10px 0',
                 backgroundColor:
                   videoSource ===
-                  'screen'
+                    'screen'
                     ? '#d9d9d9'
                     : '#8a2be2',
                 color:
                   videoSource ===
-                  'screen'
+                    'screen'
                     ? '#888'
                     : 'white',
                 border:
@@ -1883,13 +1885,13 @@ export default function Broadcaster() {
                   4,
                 cursor:
                   videoSource ===
-                  'screen'
+                    'screen'
                     ? 'not-allowed'
                     : 'pointer',
               }}
             >
               {facingMode ===
-              'user'
+                'user'
                 ? 'Cam Trước'
                 : 'Cam Sau'}
             </button>
