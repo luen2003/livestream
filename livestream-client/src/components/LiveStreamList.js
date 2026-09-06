@@ -56,15 +56,13 @@ export default function LiveStreamList() {
           <button
             onClick={() => {
               setSelectedBroadcasterId(null);
-
               socket.disconnect();
-
+              setSelectedBroadcasterId(null);
               setTimeout(() => {
-                socket.connect();
-                socket.emit('getBroadcastersList');
+                socket.connect(); 
+                socket.emit('getBroadcastersList');   
               }, 500);
             }}
-
 
             style={styles.exitButton}
           >
