@@ -16,15 +16,11 @@ export default function Viewer({
   const cameraVideo =
     useRef(null);
 
-  /*
-    Audio có thể đến trước video.
+  const audioElement =
+    useRef(null);
 
-    Vì vậy nếu audio đến trước,
-    chúng ta lưu track lại rồi gắn
-    vào stream chính khi video đến.
-  */
-  const pendingAudioTracks =
-    useRef([]);
+  const peerConnection =
+    useRef(null);
 
   const [userName, setUserName] =
     useState('');
@@ -38,10 +34,8 @@ export default function Viewer({
   const [error, setError] =
     useState('');
 
-  const [
-    hasCameraStream,
-    setHasCameraStream,
-  ] = useState(false);
+  const [hasCameraStream, setHasCameraStream] =
+    useState(false);
 
   const [
     broadcasterMediaState,
@@ -51,26 +45,21 @@ export default function Viewer({
     audioEnabled: true,
   });
 
-  const [
-    streamEnded,
-    setStreamEnded,
-  ] = useState(false);
+  const [streamEnded, setStreamEnded] =
+    useState(false);
 
-  const [
-    redirectTimer,
-    setRedirectTimer,
-  ] = useState(3);
+  const [redirectTimer, setRedirectTimer] =
+    useState(3);
 
-  // =========================================================
-  // START VIEWING
-  // =========================================================
+  /*
+   * ==========================================
+   * START VIEWING
+   * ==========================================
+   */
 
   const handleStartViewing = () => {
     if (!userName.trim()) {
-      setError(
-        'Vui lòng nhập tên'
-      );
-
+      setError('Vui lòng nhập tên');
       return;
     }
 
@@ -89,13 +78,19 @@ export default function Viewer({
     );
   };
 
-  // =========================================================
-  // WEBRTC
-  // =========================================================
+  /*
+   * ==========================================
+   * WEBRTC
+   * ==========================================
+   */
 
   useEffect(() => {
-    if (!isViewing) return;
-    if (!broadcasterId) return;
+    if (
+      !isViewing ||
+      !broadcasterId
+    ) {
+      return;
+    }
 
     const pc =
       new RTCPeerConnection({
@@ -128,253 +123,195 @@ export default function Viewer({
         ],
       });
 
-    // =======================================================
-    // ON TRACK
-    // =======================================================
+    peerConnection.current = pc;
 
-    pc.ontrack = (e) => {
+    /*
+     * ========================================
+     * NHẬN TRACK
+     * ========================================
+     */
+
+    pc.ontrack = (event) => {
       console.log(
-        '[Viewer] Received track:',
-        e.track.kind,
-        'stream:',
-        e.streams[0]?.id
+        'Received track:',
+        event.track.kind,
+        event.streams
       );
 
-      // =====================================================
-      // AUDIO
-      // =====================================================
+      if (
+        !event.streams ||
+        event.streams.length === 0
+      ) {
+        return;
+      }
 
-      if (e.track.kind === 'audio') {
-        const audioTrack =
-          e.track;
+      const stream =
+        event.streams[0];
 
-        console.log(
-          '[Viewer] Audio track received'
-        );
-
-        /*
-          Nếu video chính đã có stream,
-          gắn audio trực tiếp vào đó.
-        */
-
-        if (
-          screenVideo.current &&
-          screenVideo.current
-            .srcObject
-        ) {
-          const mainStream =
-            screenVideo.current
-              .srcObject;
-
-          const exists =
-            mainStream
-              .getAudioTracks()
-              .some(
-                (track) =>
-                  track.id ===
-                  audioTrack.id
-              );
-
-          if (!exists) {
-            mainStream.addTrack(
-              audioTrack
-            );
-          }
-
+      /*
+       * AUDIO
+       *
+       * Đây là phần quan trọng để
+       * Viewer nghe được microphone.
+       */
+      if (
+        event.track.kind === 'audio'
+      ) {
+        if (audioElement.current) {
           /*
-            Quan trọng:
-            video chính KHÔNG muted.
-          */
+           * Tạo stream chỉ chứa audio.
+           */
+          const audioStream =
+            new MediaStream([
+              event.track,
+            ]);
 
-          screenVideo.current
+          audioElement.current.srcObject =
+            audioStream;
+
+          audioElement.current
             .play()
             .catch((err) => {
-              console.log(
-                'Không thể autoplay audio:',
+              console.warn(
+                'Audio autoplay bị chặn:',
                 err
               );
             });
-        } else {
-          /*
-            Video chưa đến.
-            Lưu audio lại.
-          */
-
-          console.log(
-            '[Viewer] Audio đến trước video'
-          );
-
-          const exists =
-            pendingAudioTracks.current.some(
-              (track) =>
-                track.id ===
-                audioTrack.id
-            );
-
-          if (!exists) {
-            pendingAudioTracks.current.push(
-              audioTrack
-            );
-          }
         }
 
         return;
       }
 
-      // =====================================================
-      // VIDEO
-      // =====================================================
+      /*
+       * ======================================
+       * VIDEO
+       * ======================================
+       */
 
-      if (e.track.kind === 'video') {
-        const incomingStream =
-          e.streams[0];
+      if (
+        event.track.kind !== 'video'
+      ) {
+        return;
+      }
 
-        if (!incomingStream) {
-          console.warn(
-            '[Viewer] Video không có stream'
-          );
+      /*
+       * Stream ID dùng để phân biệt
+       * Screen và Camera.
+       *
+       * Broadcaster tạo:
+       *
+       * screen -> screen stream
+       * camera -> camera stream
+       *
+       * Nếu stream.id chứa camera thì
+       * đưa vào cameraVideo.
+       */
 
-          return;
+      const streamId =
+        stream.id.toLowerCase();
+
+      console.log(
+        'Video stream:',
+        streamId
+      );
+
+      /*
+       * Camera stream
+       */
+      if (
+        streamId.includes('camera')
+      ) {
+        if (cameraVideo.current) {
+          cameraVideo.current.srcObject =
+            stream;
+
+          setHasCameraStream(true);
         }
 
-        /*
-          VIDEO #1
-          = Main Screen / Main Camera
-        */
+        return;
+      }
 
-        if (
-          !screenVideo.current
-            .srcObject
-        ) {
+      /*
+       * Screen stream
+       */
+      if (
+        streamId.includes('screen')
+      ) {
+        if (screenVideo.current) {
           screenVideo.current.srcObject =
-            incomingStream;
-
-          /*
-            Nếu audio đến trước,
-            gắn audio vào stream chính.
-          */
-
-          pendingAudioTracks.current.forEach(
-            (audioTrack) => {
-              const exists =
-                incomingStream
-                  .getAudioTracks()
-                  .some(
-                    (track) =>
-                      track.id ===
-                      audioTrack.id
-                  );
-
-              if (!exists) {
-                incomingStream.addTrack(
-                  audioTrack
-                );
-              }
-            }
-          );
-
-          pendingAudioTracks.current =
-            [];
-
-          setHasCameraStream(
-            false
-          );
-
-          /*
-            Bắt đầu phát video + audio
-          */
-
-          screenVideo.current
-            .play()
-            .catch((err) => {
-              console.log(
-                'Main video play error:',
-                err
-              );
-            });
+            stream;
         }
 
-        /*
-          VIDEO #2
-          = Camera overlay
-        */
+        return;
+      }
 
-        else {
-          if (
-            cameraVideo.current
-          ) {
-            cameraVideo.current.srcObject =
-              incomingStream;
+      /*
+       * Fallback:
+       *
+       * Nếu browser không giữ tên stream
+       * như mong muốn thì video đầu tiên
+       * sẽ làm video chính.
+       */
 
-            setHasCameraStream(
-              true
-            );
+      if (
+        !screenVideo.current?.srcObject
+      ) {
+        screenVideo.current.srcObject =
+          stream;
+      } else if (
+        !cameraVideo.current?.srcObject
+      ) {
+        cameraVideo.current.srcObject =
+          stream;
 
-            cameraVideo.current
-              .play()
-              .catch((err) => {
-                console.log(
-                  'Camera video play error:',
-                  err
-                );
-              });
-          }
-        }
+        setHasCameraStream(true);
       }
     };
 
-    // =======================================================
-    // ICE
-    // =======================================================
+    /*
+     * ========================================
+     * ICE
+     * ========================================
+     */
 
-    pc.onicecandidate = (e) => {
-      if (e.candidate) {
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
         socket.emit(
           'candidate',
           broadcasterId,
-          e.candidate
+          event.candidate
         );
       }
     };
 
-    // =======================================================
-    // CONNECTION STATE
-    // =======================================================
-
-    pc.onconnectionstatechange =
-      () => {
-        console.log(
-          '[Viewer] Connection state:',
-          pc.connectionState
-        );
-      };
-
-    // =======================================================
-    // OFFER
-    // =======================================================
+    /*
+     * ========================================
+     * OFFER
+     * ========================================
+     */
 
     const handleOffer = async (
       id,
-      desc
+      description
     ) => {
-      if (id !== broadcasterId)
+      if (
+        id !== broadcasterId
+      ) {
         return;
+      }
+
+      /*
+       * Không reset video trước khi
+       * nhận offer nếu không cần thiết.
+       *
+       * Tránh trường hợp màn hình
+       * bị nhấp nháy.
+       */
 
       try {
-        console.log(
-          '[Viewer] Received offer'
-        );
-
-        /*
-          KHÔNG reset srcObject ở đây.
-
-          Khi Broadcaster đổi mode,
-          WebRTC sẽ renegotiate tracks.
-        */
-
         await pc.setRemoteDescription(
           new RTCSessionDescription(
-            desc
+            description
           )
         );
 
@@ -392,38 +329,45 @@ export default function Viewer({
         );
       } catch (err) {
         console.error(
-          '[Viewer] Offer error:',
+          'Offer error:',
           err
         );
       }
     };
 
-    // =======================================================
-    // CANDIDATE
-    // =======================================================
+    /*
+     * ========================================
+     * CANDIDATE
+     * ========================================
+     */
 
     const handleCandidate = (
       id,
       candidate
     ) => {
-      if (id !== broadcasterId)
+      if (
+        id !== broadcasterId
+      ) {
         return;
-
-      if (!candidate) return;
+      }
 
       pc.addIceCandidate(
-        new RTCIceCandidate(candidate)
+        new RTCIceCandidate(
+          candidate
+        )
       ).catch((err) => {
         console.error(
-          '[Viewer] ICE candidate error:',
+          'ICE candidate error:',
           err
         );
       });
     };
 
-    // =======================================================
-    // VIEWER COUNT
-    // =======================================================
+    /*
+     * ========================================
+     * VIEWER COUNT
+     * ========================================
+     */
 
     const handleViewerCount = (
       count
@@ -431,24 +375,36 @@ export default function Viewer({
       setViewerCount(count);
     };
 
-    // =======================================================
-    // MEDIA STATE
-    // =======================================================
+    /*
+     * ========================================
+     * MEDIA STATE
+     * ========================================
+     */
 
-    const handleMediaStateChanged =
-      ({
+    const handleMediaStateChanged = ({
+      videoEnabled,
+      audioEnabled,
+    }) => {
+      setBroadcasterMediaState({
         videoEnabled,
         audioEnabled,
-      }) => {
-        setBroadcasterMediaState({
-          videoEnabled,
-          audioEnabled,
-        });
-      };
+      });
 
-    // =======================================================
-    // STREAM ENDED
-    // =======================================================
+      /*
+       * Nếu broadcaster tắt mic,
+       * đảm bảo audio element muted.
+       */
+      if (audioElement.current) {
+        audioElement.current.muted =
+          !audioEnabled;
+      }
+    };
+
+    /*
+     * ========================================
+     * STREAM ENDED
+     * ========================================
+     */
 
     const handleStreamEnded = () => {
       setStreamEnded(true);
@@ -468,9 +424,7 @@ export default function Viewer({
           );
 
           if (countdown <= 0) {
-            clearInterval(
-              interval
-            );
+            clearInterval(interval);
 
             window.location.href =
               '/';
@@ -478,44 +432,11 @@ export default function Viewer({
         }, 1000);
     };
 
-    // =======================================================
-    // CHANGE MODE
-    // =======================================================
-
-    const handleChangeStreamMode =
-      ({ mode }) => {
-        console.log(
-          '[Viewer] Stream mode:',
-          mode
-        );
-
-        /*
-          Không reset screenVideo.
-
-          Khi WebRTC nhận track mới,
-          ontrack sẽ tự xử lý.
-
-          Chỉ cần đảm bảo nếu mode không
-          phải both thì camera overlay ẩn.
-        */
-
-        if (mode !== 'both') {
-          setHasCameraStream(
-            false
-          );
-
-          if (
-            cameraVideo.current
-          ) {
-            cameraVideo.current.srcObject =
-              null;
-          }
-        }
-      };
-
-    // =======================================================
-    // SOCKET LISTENERS
-    // =======================================================
+    /*
+     * ========================================
+     * SOCKET EVENTS
+     * ========================================
+     */
 
     socket.on(
       'offer',
@@ -542,14 +463,11 @@ export default function Viewer({
       handleStreamEnded
     );
 
-    socket.on(
-      'change-stream-mode',
-      handleChangeStreamMode
-    );
-
-    // =======================================================
-    // CLEANUP
-    // =======================================================
+    /*
+     * ========================================
+     * CLEANUP
+     * ========================================
+     */
 
     return () => {
       socket.emit(
@@ -582,46 +500,43 @@ export default function Viewer({
         handleStreamEnded
       );
 
-      socket.off(
-        'change-stream-mode',
-        handleChangeStreamMode
-      );
+      if (audioElement.current) {
+        audioElement.current.srcObject =
+          null;
+      }
 
-      pc.close();
-
-      pendingAudioTracks.current =
-        [];
-
-      if (
-        screenVideo.current
-      ) {
+      if (screenVideo.current) {
         screenVideo.current.srcObject =
           null;
       }
 
-      if (
-        cameraVideo.current
-      ) {
+      if (cameraVideo.current) {
         cameraVideo.current.srcObject =
           null;
       }
+
+      pc.close();
+
+      peerConnection.current =
+        null;
     };
   }, [
     isViewing,
     broadcasterId,
   ]);
 
-  // =========================================================
-  // UI
-  // =========================================================
+  /*
+   * ==========================================
+   * UI
+   * ==========================================
+   */
 
   return (
     <div>
       {!isViewing ? (
         <div>
           <h2>
-            Nhập tên để xem
-            livestream
+            Nhập tên để xem livestream
           </h2>
 
           <input
@@ -662,7 +577,6 @@ export default function Viewer({
                 '#1890ff',
               color: 'white',
               border: 'none',
-              borderRadius: 4,
             }}
           >
             Vào xem ngay
@@ -676,17 +590,27 @@ export default function Viewer({
               marginBottom: 5,
             }}
           >
-            Đang xem livestream |
+            Đang xem livestream |{' '}
             <b>
-              {' '}
-              Viewers:{' '}
-              {viewerCount}
+              Viewers: {viewerCount}
             </b>
           </div>
 
-          {/* =================================================
-              VIDEO CONTAINER
-          ================================================= */}
+          {/*
+           * AUDIO RIÊNG
+           *
+           * Không hiển thị.
+           */
+          }
+
+          <audio
+            ref={audioElement}
+            autoPlay
+            playsInline
+            style={{
+              display: 'none',
+            }}
+          />
 
           <div
             style={{
@@ -698,12 +622,9 @@ export default function Viewer({
               overflow: 'hidden',
             }}
           >
-            {/* MEDIA STATE */}
-
             <div
               style={{
-                position:
-                  'absolute',
+                position: 'absolute',
                 top: 10,
                 left: 10,
                 zIndex: 30,
@@ -742,59 +663,41 @@ export default function Viewer({
               )}
             </div>
 
-            {/* =================================================
-                MAIN VIDEO
-
-                QUAN TRỌNG:
-                KHÔNG muted
-            ================================================= */}
-
+            {/*
+             * VIDEO CHÍNH
+             */}
             <video
               ref={screenVideo}
               autoPlay
               playsInline
               controls={false}
-              muted={false}
               style={{
                 width: '100%',
                 height: '100%',
                 objectFit: 'contain',
-                background: '#000',
               }}
             />
 
-            {/* =================================================
-                CAMERA OVERLAY
-
-                Camera này KHÔNG phát audio.
-            ================================================= */}
-
+            {/*
+             * CAMERA PHỤ
+             */}
             <div
               style={{
-                display:
-                  hasCameraStream
-                    ? 'block'
-                    : 'none',
+                display: hasCameraStream
+                  ? 'block'
+                  : 'none',
 
-                position:
-                  'absolute',
-
+                position: 'absolute',
                 bottom: 20,
                 right: 20,
-
                 width: '200px',
                 height: '150px',
-
                 borderRadius: 8,
                 border:
                   '2px solid white',
-
                 overflow: 'hidden',
-
                 background: '#000',
-
                 zIndex: 20,
-
                 boxShadow:
                   '0 4px 10px rgba(0,0,0,0.5)',
               }}
@@ -804,7 +707,6 @@ export default function Viewer({
                 autoPlay
                 playsInline
                 muted
-                controls={false}
                 style={{
                   width: '100%',
                   height: '100%',
@@ -812,10 +714,6 @@ export default function Viewer({
                 }}
               />
             </div>
-
-            {/* =================================================
-                STREAM ENDED
-            ================================================= */}
 
             {streamEnded && (
               <div
@@ -826,43 +724,30 @@ export default function Viewer({
                   left: 0,
                   right: 0,
                   bottom: 0,
-
                   backgroundColor:
                     'rgba(0,0,0,0.85)',
-
                   display: 'flex',
                   flexDirection:
                     'column',
-
                   alignItems:
                     'center',
-
                   justifyContent:
                     'center',
-
                   color: 'white',
-
                   zIndex: 100,
                 }}
               >
                 <h2>
-                  Livestream đã
-                  kết thúc
+                  Livestream đã kết thúc
                 </h2>
 
                 <p>
-                  Quay về trang chủ
-                  sau{' '}
-                  {redirectTimer}
-                  s...
+                  Quay về trang chủ sau{' '}
+                  {redirectTimer}s...
                 </p>
               </div>
             )}
           </div>
-
-          {/* =================================================
-              CHAT
-          ================================================= */}
 
           <div
             style={{
