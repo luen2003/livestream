@@ -65,7 +65,7 @@ Broadcaster có thể ghi lại livestream bằng:
 - `MediaRecorder`
 - `Canvas`
 - `MediaStream`
-- Web Audio API
+- `Web Audio API`
 
 Video sau khi livestream kết thúc có thể được xem và tải xuống dưới dạng:
 
