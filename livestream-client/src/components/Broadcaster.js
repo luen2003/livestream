@@ -422,10 +422,10 @@ export default function Broadcaster() {
 
           {recordedVideoUrl && (
             <div style={{ marginTop: 30, padding: 20, border: '2px dashed #10b981', borderRadius: 8, background: '#f9fafb' }}>
-              <h3 style={{ color: '#10b981', marginBottom: 15 }}>Livestream của bạn đã được lưu hoàn chỉnh!</h3>
+              <h3 style={{ color: '#10b981', marginBottom: 15 }}>✨ Livestream của bạn đã được lưu hoàn chỉnh!</h3>
               <video src={recordedVideoUrl} controls style={{ width: '100%', borderRadius: 8, backgroundColor: '#000', marginBottom: 15 }} />
               <a href={recordedVideoUrl} download={`Livestream_${streamName || 'Record'}.webm`} style={{ display: 'block', textAlign: 'center', backgroundColor: '#10b981', color: 'white', padding: '10px', borderRadius: 4, textDecoration: 'none', fontWeight: 'bold' }}>
-                Tải Video Về Máy (.webm)
+                ⬇️ Tải Video Về Máy (.webm)
               </a>
             </div>
           )}
