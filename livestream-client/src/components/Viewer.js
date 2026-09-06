@@ -3,16 +3,15 @@ import { socket } from '../socket';
 import Chat from './Chat';
 
 export default function Viewer({ broadcasterId }) {
-  const screenVideo = useRef(); // Luồng chính (Screen hoặc Camera nếu chỉ có 1)
-  const cameraVideo = useRef(); // Luồng phụ (Camera khi ở chế độ both)
-  const audioRef = useRef();    // Thẻ Audio độc lập để phát tiếng
+  const screenVideo = useRef();
+  const cameraVideo = useRef();
+  const audioRef = useRef();    
   
   const [userName, setUserName] = useState('');
   const [isViewing, setIsViewing] = useState(false);
   const [viewerCount, setViewerCount] = useState(0);
   const [error, setError] = useState('');
 
-  // State kiểm soát xem có stream thứ 2 không để chia layout
   const [hasCameraStream, setHasCameraStream] = useState(false);
   const [broadcasterMediaState, setBroadcasterMediaState] = useState({ videoEnabled: true, audioEnabled: true });
   const [streamEnded, setStreamEnded] = useState(false);
@@ -58,7 +57,6 @@ export default function Viewer({ broadcasterId }) {
           screenVideo.current.srcObject = e.streams[0];
           setHasCameraStream(false); 
         } else if (screenVideo.current.srcObject.id !== e.streams[0].id) {
-          // Stream thứ 2 đến, đây là Camera phụ
           if(cameraVideo.current) {
              cameraVideo.current.srcObject = e.streams[0];
              setHasCameraStream(true); 
@@ -66,13 +64,9 @@ export default function Viewer({ broadcasterId }) {
         }
       }
       
-      // FIX LỖI ÂM THANH TRÊN PC 
       if (e.track.kind === 'audio') {
         if (audioRef.current) {
-          // Gán trực tiếp luồng (stream) thay vì tạo MediaStream rời rạc
           audioRef.current.srcObject = e.streams[0];
-          
-          // Phải gọi hàm play() để kích hoạt âm thanh trên trình duyệt máy tính
           const playPromise = audioRef.current.play();
           if (playPromise !== undefined) {
             playPromise.catch(error => {
@@ -89,7 +83,6 @@ export default function Viewer({ broadcasterId }) {
 
     socket.on('offer', async (id, desc) => {
       if (id !== broadcasterId) return;
-      // Reset layout khi Broadcaster thay đổi mode
       setHasCameraStream(false);
       if(screenVideo.current) screenVideo.current.srcObject = null;
       if(cameraVideo.current) cameraVideo.current.srcObject = null;
@@ -154,10 +147,8 @@ export default function Viewer({ broadcasterId }) {
         <div>
           <div style={{ fontSize: 14, marginBottom: 5 }}>Đang xem livestream | <b>Viewers: {viewerCount}</b></div>
 
-          {/* THẺ AUDIO ẨN */}
           <audio ref={audioRef} autoPlay playsInline style={{ display: 'none' }} />
 
-          {/* CONTAINER CHÍNH */}
           <div style={{ 
             position: 'relative', 
             width: '100%', 
@@ -168,21 +159,27 @@ export default function Viewer({ broadcasterId }) {
           }}>
             
             <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 10, display: 'flex', gap: 10 }}>
-              {!broadcasterMediaState.videoEnabled && <span style={{ background: '#ff4d4f', color: 'white', padding: '4px 8px', borderRadius: 4 }}>📷 Cam Off</span>}
-              {!broadcasterMediaState.audioEnabled && <span style={{ background: '#ff4d4f', color: 'white', padding: '4px 8px', borderRadius: 4 }}>🔇 Mic Off</span>}
+              {!broadcasterMediaState.videoEnabled && (
+                <span style={{ background: '#ff4d4f', color: 'white', padding: '4px 8px', borderRadius: 4 }}>
+                  Cam Off
+                </span>
+              )}
+              {!broadcasterMediaState.audioEnabled && (
+                <span style={{ background: '#ff4d4f', color: 'white', padding: '4px 8px', borderRadius: 4 }}>
+                  Mic Off
+                </span>
+              )}
             </div>
 
-            {/* VIDEO 1: MAIN BACKGROUND */}
             <video
               ref={screenVideo}
               autoPlay
               playsInline
               controls={false}
-              muted // Khuyến khích mute video vì âm thanh đã được xử lý bởi <audio ref={audioRef}>
+              muted 
               style={{ width: '100%', height: '100%', objectFit: 'contain' }}
             />
 
-            {/* VIDEO 2: FLOATING OVERLAY (Chỉ hiện khi có 2 stream) */}
             <div style={{ 
               display: hasCameraStream ? 'block' : 'none',
               position: 'absolute', 
@@ -201,7 +198,7 @@ export default function Viewer({ broadcasterId }) {
                 ref={cameraVideo}
                 autoPlay
                 playsInline
-                muted // Mute bắt buộc với video phụ
+                muted 
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
             </div>
