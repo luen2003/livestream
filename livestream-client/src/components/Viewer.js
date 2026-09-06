@@ -5,6 +5,8 @@ import Chat from './Chat';
 export default function Viewer({ broadcasterId }) {
   const screenVideo = useRef(); // Luồng chính (Screen hoặc Camera nếu chỉ có 1)
   const cameraVideo = useRef(); // Luồng phụ (Camera khi ở chế độ both)
+  const audioRef = useRef();    // Thẻ Audio độc lập để phát tiếng (sửa lỗi mất tiếng chế độ cả 2)
+  
   const [userName, setUserName] = useState('');
   const [isViewing, setIsViewing] = useState(false);
   const [viewerCount, setViewerCount] = useState(0);
@@ -52,13 +54,10 @@ export default function Viewer({ broadcasterId }) {
 
     pc.ontrack = (e) => {
       if (e.track.kind === 'video') {
-        // Logic mới: 
-        // Nếu chưa có stream chính -> gán vào screenVideo (Main)
-        // Nếu đã có stream chính -> gán vào cameraVideo (Overlay)
         if (!screenVideo.current.srcObject) {
           screenVideo.current.srcObject = e.streams[0];
           setHasCameraStream(false); 
-        } else {
+        } else if (screenVideo.current.srcObject.id !== e.streams[0].id) {
           // Stream thứ 2 đến, đây là Camera phụ
           if(cameraVideo.current) {
              cameraVideo.current.srcObject = e.streams[0];
@@ -67,11 +66,14 @@ export default function Viewer({ broadcasterId }) {
         }
       }
       if (e.track.kind === 'audio') {
-        // Gắn audio vào element chính để phát tiếng
-        if (screenVideo.current && !screenVideo.current.srcObject) return;
-        // Đảm bảo audio chạy trên video chính
-        if (screenVideo.current.srcObject !== e.streams[0] && !hasCameraStream) {
-             // Logic dự phòng nếu audio track đến từ stream khác
+        // Tách biệt luồng âm thanh gắn vào thẻ <audio> riêng
+        // Do cameraVideo bị set "muted" nên không thể phụ thuộc vào audio dính trong stream đó
+        if (audioRef.current) {
+          if (!audioRef.current.srcObject) {
+            audioRef.current.srcObject = new MediaStream([e.track]);
+          } else {
+            audioRef.current.srcObject.addTrack(e.track);
+          }
         }
       }
     };
@@ -86,6 +88,7 @@ export default function Viewer({ broadcasterId }) {
       setHasCameraStream(false);
       if(screenVideo.current) screenVideo.current.srcObject = null;
       if(cameraVideo.current) cameraVideo.current.srcObject = null;
+      if(audioRef.current) audioRef.current.srcObject = null; // Xoá audio track cũ
 
       await pc.setRemoteDescription(new RTCSessionDescription(desc));
       const answer = await pc.createAnswer();
@@ -146,6 +149,9 @@ export default function Viewer({ broadcasterId }) {
         <div>
           <div style={{ fontSize: 14, marginBottom: 5 }}>Đang xem livestream | <b>Viewers: {viewerCount}</b></div>
 
+          {/* CHÈN THẺ AUDIO ẨN ĐỂ ĐẢM BẢO NGƯỜI DÙNG LUÔN NGHE ĐƯỢC ÂM THANH */}
+          <audio ref={audioRef} autoPlay playsInline style={{ display: 'none' }} />
+
           {/* CONTAINER CHÍNH */}
           <div style={{ 
             position: 'relative', 
@@ -167,6 +173,7 @@ export default function Viewer({ broadcasterId }) {
               autoPlay
               playsInline
               controls={false}
+              muted // Khuyến khích mute video vì âm thanh đã được xử lý bởi <audio ref={audioRef}>
               style={{ width: '100%', height: '100%', objectFit: 'contain' }}
             />
 
@@ -189,7 +196,7 @@ export default function Viewer({ broadcasterId }) {
                 ref={cameraVideo}
                 autoPlay
                 playsInline
-                muted // Mute để tránh tiếng vang, tiếng đã có ở video chính
+                muted // Mute bắt buộc với video phụ
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
             </div>

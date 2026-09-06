@@ -33,8 +33,16 @@ export default function Broadcaster() {
 
   // Nhận diện màn hình đang là dọc (Mobile) hay ngang (PC)
   const isPortrait = typeof window !== 'undefined' && window.innerHeight > window.innerWidth;
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
+    // Kiểm tra chính xác xem có phải thiết bị di động không
+    const mobileCheck = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    setIsMobile(mobileCheck);
+    if (mobileCheck) {
+      setVideoSource('camera'); // Ép kiểu mặc định là camera nếu dùng điện thoại
+    }
+
     canvasRef.current = document.createElement('canvas');
 
     const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -73,7 +81,6 @@ export default function Broadcaster() {
       workerRef.current.terminate();
     }
 
-    // FIX LÕI ĐEN 2 BÊN: Hàm vẽ mô phỏng object-fit: cover để video luôn tràn viền
     const drawCover = (context, video, x, y, w, h) => {
       if (!video.videoWidth || !video.videoHeight) return;
       const videoRatio = video.videoWidth / video.videoHeight;
@@ -112,7 +119,6 @@ export default function Broadcaster() {
       ctx.fillStyle = '#000000';
       ctx.fillRect(0, 0, width, height);
 
-      // Sử dụng drawCover thay vì drawImage bình thường
       if ((mode === 'screen' || mode === 'both') && screenVideo && screenVideo.readyState >= 2) {
         drawCover(ctx, screenVideo, 0, 0, width, height);
       }
@@ -207,7 +213,7 @@ export default function Broadcaster() {
         const scr = await navigator.mediaDevices.getDisplayMedia({ video: true });
         const cam = await navigator.mediaDevices.getUserMedia({
           video: { facingMode: facingModeRef.current },
-          audio: true
+          audio: true // Mic của người dùng nằm trong stream này
         });
         newStreams = { screen: scr, camera: cam };
         activeStreamForAudio = cam;
@@ -219,10 +225,8 @@ export default function Broadcaster() {
 
       if (activeStreamForAudio) connectAudioToProxy(activeStreamForAudio);
 
-
       const canvasWidth = isPortrait ? 720 : 1280;
       const canvasHeight = isPortrait ? 1280 : 960;
-
 
       drawToCanvas(source, localScreenVideo.current, localCameraVideo.current, canvasWidth, canvasHeight);
 
@@ -284,7 +288,6 @@ export default function Broadcaster() {
     const newMode = facingModeRef.current === 'user' ? 'environment' : 'user';
     facingModeRef.current = newMode;
     setFacingMode(newMode);
-
     await switchMode(videoSource);
   };
 
@@ -399,8 +402,13 @@ export default function Broadcaster() {
           <input placeholder="Tên livestream" value={streamName} onChange={(e) => setStreamName(e.target.value)} style={{ width: '100%', marginBottom: 10, height: 40, fontSize: 16 }} />
           <select value={videoSource} onChange={(e) => setVideoSource(e.target.value)} style={{ width: '100%', marginBottom: 10, height: 45, fontSize: 16 }}>
             <option value="camera">Chỉ Camera</option>
-            <option value="screen">Chỉ Màn hình</option>
-            <option value="both">Cả 2 (Màn hình chính + Camera phụ)</option>
+            {/* Chỉ hiện 2 tuỳ chọn này nếu không phải là Mobile */}
+            {!isMobile && (
+              <>
+                <option value="screen">Chỉ Màn hình</option>
+                <option value="both">Cả 2 (Màn hình chính + Camera phụ)</option>
+              </>
+            )}
           </select>
           {videoSource !== 'screen' && (
             <select
@@ -422,21 +430,12 @@ export default function Broadcaster() {
           {recordedVideoUrl && (
             <div style={{ marginTop: 30, padding: 20, border: '2px dashed #10b981', borderRadius: 8, background: '#f9fafb' }}>
               <h3 style={{ color: '#10b981', marginBottom: 15 }}>✨ Livestream của bạn đã được lưu hoàn chỉnh!</h3>
-              <video
-                src={recordedVideoUrl}
-                controls
-                style={{ width: '100%', borderRadius: 8, backgroundColor: '#000', marginBottom: 15 }}
-              />
-              <a
-                href={recordedVideoUrl}
-                download={`Livestream_${streamName || 'Record'}.webm`}
-                style={{ display: 'block', textAlign: 'center', backgroundColor: '#10b981', color: 'white', padding: '10px', borderRadius: 4, textDecoration: 'none', fontWeight: 'bold' }}
-              >
+              <video src={recordedVideoUrl} controls style={{ width: '100%', borderRadius: 8, backgroundColor: '#000', marginBottom: 15 }} />
+              <a href={recordedVideoUrl} download={`Livestream_${streamName || 'Record'}.webm`} style={{ display: 'block', textAlign: 'center', backgroundColor: '#10b981', color: 'white', padding: '10px', borderRadius: 4, textDecoration: 'none', fontWeight: 'bold' }}>
                 ⬇️ Tải Video Về Máy (.webm)
               </a>
             </div>
           )}
-
         </div>
       ) : (
         <div>
@@ -446,8 +445,13 @@ export default function Broadcaster() {
 
           <div style={{ marginBottom: 10, display: 'flex', gap: 10 }}>
             <button disabled={videoSource === 'camera'} onClick={() => switchMode('camera')} style={{ flex: 1, padding: 5 }}>📷 Camera</button>
-            <button disabled={videoSource === 'screen'} onClick={() => switchMode('screen')} style={{ flex: 1, padding: 5 }}>🖥 Screen</button>
-            <button disabled={videoSource === 'both'} onClick={() => switchMode('both')} style={{ flex: 1, padding: 5 }}>📷 + 🖥 Both</button>
+            {/* Chặn không cho thiết bị Mobile chuyển sang Screen / Both */}
+            {!isMobile && (
+              <>
+                <button disabled={videoSource === 'screen'} onClick={() => switchMode('screen')} style={{ flex: 1, padding: 5 }}>🖥 Screen</button>
+                <button disabled={videoSource === 'both'} onClick={() => switchMode('both')} style={{ flex: 1, padding: 5 }}>📷 + 🖥 Both</button>
+              </>
+            )}
           </div>
 
           <div style={{
@@ -466,7 +470,6 @@ export default function Broadcaster() {
               {!audioEnabled && <span style={{ background: 'red', color: 'white', padding: '4px 8px', borderRadius: 4 }}>🔇 Mic Off</span>}
             </div>
 
-            {/* CHỈNH LẠI OBJECT-FIT: Dùng cover để tràn viền 100% trên giao diện preview */}
             {videoSource === 'camera' && (
               <video ref={localCameraVideo} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             )}
@@ -477,11 +480,7 @@ export default function Broadcaster() {
 
             {videoSource === 'both' && (
               <>
-                <video
-                  ref={localScreenVideo}
-                  autoPlay muted playsInline
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                />
+                <video ref={localScreenVideo} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 <div style={{
                   position: 'absolute',
                   bottom: '2px',
@@ -495,11 +494,7 @@ export default function Broadcaster() {
                   zIndex: 20,
                   background: '#000'
                 }}>
-                  <video
-                    ref={localCameraVideo}
-                    autoPlay muted playsInline
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                  />
+                  <video ref={localCameraVideo} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 </div>
               </>
             )}
