@@ -5,7 +5,7 @@ import Chat from './Chat';
 export default function Viewer({ broadcasterId }) {
   const screenVideo = useRef(); // Luồng chính (Screen hoặc Camera nếu chỉ có 1)
   const cameraVideo = useRef(); // Luồng phụ (Camera khi ở chế độ both)
-  const audioRef = useRef();    // Thẻ Audio độc lập để phát tiếng (sửa lỗi mất tiếng chế độ cả 2)
+  const audioRef = useRef();    // Thẻ Audio độc lập để phát tiếng
   
   const [userName, setUserName] = useState('');
   const [isViewing, setIsViewing] = useState(false);
@@ -65,14 +65,19 @@ export default function Viewer({ broadcasterId }) {
           }
         }
       }
+      
+      // FIX LỖI ÂM THANH TRÊN PC 
       if (e.track.kind === 'audio') {
-        // Tách biệt luồng âm thanh gắn vào thẻ <audio> riêng
-        // Do cameraVideo bị set "muted" nên không thể phụ thuộc vào audio dính trong stream đó
         if (audioRef.current) {
-          if (!audioRef.current.srcObject) {
-            audioRef.current.srcObject = new MediaStream([e.track]);
-          } else {
-            audioRef.current.srcObject.addTrack(e.track);
+          // Gán trực tiếp luồng (stream) thay vì tạo MediaStream rời rạc
+          audioRef.current.srcObject = e.streams[0];
+          
+          // Phải gọi hàm play() để kích hoạt âm thanh trên trình duyệt máy tính
+          const playPromise = audioRef.current.play();
+          if (playPromise !== undefined) {
+            playPromise.catch(error => {
+              console.log("Auto-play audio bị chặn, cần tương tác người dùng:", error);
+            });
           }
         }
       }
@@ -84,11 +89,11 @@ export default function Viewer({ broadcasterId }) {
 
     socket.on('offer', async (id, desc) => {
       if (id !== broadcasterId) return;
-      // Reset layout khi Broadcaster thay đổi mode (renegotiation)
+      // Reset layout khi Broadcaster thay đổi mode
       setHasCameraStream(false);
       if(screenVideo.current) screenVideo.current.srcObject = null;
       if(cameraVideo.current) cameraVideo.current.srcObject = null;
-      if(audioRef.current) audioRef.current.srcObject = null; // Xoá audio track cũ
+      if(audioRef.current) audioRef.current.srcObject = null;
 
       await pc.setRemoteDescription(new RTCSessionDescription(desc));
       const answer = await pc.createAnswer();
@@ -149,7 +154,7 @@ export default function Viewer({ broadcasterId }) {
         <div>
           <div style={{ fontSize: 14, marginBottom: 5 }}>Đang xem livestream | <b>Viewers: {viewerCount}</b></div>
 
-          {/* CHÈN THẺ AUDIO ẨN ĐỂ ĐẢM BẢO NGƯỜI DÙNG LUÔN NGHE ĐƯỢC ÂM THANH */}
+          {/* THẺ AUDIO ẨN */}
           <audio ref={audioRef} autoPlay playsInline style={{ display: 'none' }} />
 
           {/* CONTAINER CHÍNH */}
@@ -167,7 +172,7 @@ export default function Viewer({ broadcasterId }) {
               {!broadcasterMediaState.audioEnabled && <span style={{ background: '#ff4d4f', color: 'white', padding: '4px 8px', borderRadius: 4 }}>🔇 Mic Off</span>}
             </div>
 
-            {/* VIDEO 1: MAIN BACKGROUND (Screen hoặc Cam chính) */}
+            {/* VIDEO 1: MAIN BACKGROUND */}
             <video
               ref={screenVideo}
               autoPlay
@@ -183,7 +188,7 @@ export default function Viewer({ broadcasterId }) {
               position: 'absolute', 
               bottom: 20,
               right: 20,
-              width: '200px', // Kích thước nhỏ
+              width: '200px',
               height: '150px',
               borderRadius: 8,
               border: '2px solid white',
