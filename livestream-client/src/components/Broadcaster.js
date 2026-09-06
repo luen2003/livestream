@@ -20,6 +20,8 @@ export default function Broadcaster() {
   const [isStreaming, setIsStreaming] = useState(false);
   const [error, setError] = useState('');
   const [viewerCount, setViewerCount] = useState(0);
+
+  // Chế độ được chọn TRƯỚC khi livestream
   const [videoSource, setVideoSource] = useState('camera');
 
   const [videoEnabled, setVideoEnabled] = useState(true);
@@ -63,6 +65,10 @@ export default function Broadcaster() {
       ) {
         audioContextRef.current.close();
       }
+
+      if (recordedVideoUrl) {
+        URL.revokeObjectURL(recordedVideoUrl);
+      }
     };
   }, []);
 
@@ -93,7 +99,9 @@ export default function Broadcaster() {
     if (audioSourceRef.current) {
       try {
         audioSourceRef.current.disconnect();
-      } catch (e) {}
+      } catch (e) {
+        // ignore
+      }
 
       audioSourceRef.current = null;
     }
@@ -129,6 +137,7 @@ export default function Broadcaster() {
 
     if (!ctx) return;
 
+    // Stop worker cũ
     if (workerRef.current) {
       workerRef.current.postMessage('stop');
       workerRef.current.terminate();
@@ -204,7 +213,10 @@ export default function Broadcaster() {
       ctx.fillStyle = '#000000';
       ctx.fillRect(0, 0, width, height);
 
+      // =====================================================
       // SCREEN
+      // =====================================================
+
       if (
         (mode === 'screen' || mode === 'both') &&
         screenVideo &&
@@ -220,7 +232,10 @@ export default function Broadcaster() {
         );
       }
 
+      // =====================================================
       // CAMERA ONLY
+      // =====================================================
+
       if (
         mode === 'camera' &&
         cameraVideo &&
@@ -236,7 +251,10 @@ export default function Broadcaster() {
         );
       }
 
+      // =====================================================
       // CAMERA OVERLAY
+      // =====================================================
+
       if (
         mode === 'both' &&
         cameraVideo &&
@@ -290,12 +308,15 @@ export default function Broadcaster() {
     if (audioSourceRef.current) {
       try {
         audioSourceRef.current.disconnect();
-      } catch (e) {}
+      } catch (e) {
+        // ignore
+      }
 
       audioSourceRef.current = null;
     }
 
-    const audioTracks = stream?.getAudioTracks() || [];
+    const audioTracks =
+      stream?.getAudioTracks() || [];
 
     if (audioTracks.length === 0) return;
 
@@ -342,7 +363,10 @@ export default function Broadcaster() {
         audioDestinationRef.current.stream.getAudioTracks()[0];
 
       if (!canvasTrack) {
-        console.error('Không có canvas video track');
+        console.error(
+          'Không có canvas video track'
+        );
+
         return;
       }
 
@@ -386,15 +410,19 @@ export default function Broadcaster() {
           'video/webm;codecs=vp8,opus';
       }
 
-      const recorder = new MediaRecorder(
-        streamToRecord,
-        {
-          mimeType,
-        }
-      );
+      const recorder =
+        new MediaRecorder(
+          streamToRecord,
+          {
+            mimeType,
+          }
+        );
 
       recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
+        if (
+          e.data &&
+          e.data.size > 0
+        ) {
           recordedChunksRef.current.push(
             e.data
           );
@@ -410,7 +438,8 @@ export default function Broadcaster() {
 
       recorder.start(1000);
 
-      mediaRecorderRef.current = recorder;
+      mediaRecorderRef.current =
+        recorder;
     } catch (err) {
       console.error(
         'Lỗi khi khởi tạo ghi hình:',
@@ -420,7 +449,7 @@ export default function Broadcaster() {
   };
 
   // =========================================================
-  // GET MEDIA
+  // GET MEDIA STREAM
   // =========================================================
 
   const getMediaStream = async (source) => {
@@ -489,15 +518,17 @@ export default function Broadcaster() {
             combinedStream;
         }
 
-        // Nếu người dùng bấm Stop Sharing
+        // Người dùng dừng chia sẻ màn hình
         scr.getVideoTracks()[0].onended =
           () => {
             console.log(
               'Người dùng đã dừng chia sẻ màn hình'
             );
 
+            // KHÔNG chuyển sang camera.
+            // Vì chế độ đã được khóa khi livestream.
             if (isStreaming) {
-              switchMode('camera');
+              stopStreaming();
             }
           };
       }
@@ -507,13 +538,11 @@ export default function Broadcaster() {
       // =====================================================
 
       else if (source === 'both') {
-        // Screen chỉ lấy video
         const scr =
           await navigator.mediaDevices.getDisplayMedia({
             video: true,
           });
 
-        // Camera lấy video + microphone
         const cam =
           await navigator.mediaDevices.getUserMedia({
             video: {
@@ -524,8 +553,6 @@ export default function Broadcaster() {
           });
 
         /*
-          QUAN TRỌNG:
-
           Screen stream:
             - Screen video
             - Microphone audio
@@ -533,11 +560,10 @@ export default function Broadcaster() {
           Camera stream:
             - Camera video
 
-          Như vậy WebRTC sẽ gửi:
-
+          WebRTC:
             Video #1 = Screen
-            Audio #1 = Microphone
             Video #2 = Camera
+            Audio #1 = Microphone
         */
 
         const screenStream =
@@ -569,15 +595,17 @@ export default function Broadcaster() {
             cameraStream;
         }
 
-        // User dừng screen sharing
+        // Người dùng dừng chia sẻ màn hình
         scr.getVideoTracks()[0].onended =
           () => {
             console.log(
               'Người dùng đã dừng chia sẻ màn hình'
             );
 
+            // KHÔNG chuyển sang camera.
+            // Dừng luôn livestream.
             if (isStreaming) {
-              switchMode('camera');
+              stopStreaming();
             }
           };
       }
@@ -585,7 +613,10 @@ export default function Broadcaster() {
       currentStreams.current =
         newStreams;
 
-      // Connect microphone
+      // =====================================================
+      // AUDIO
+      // =====================================================
+
       if (activeStreamForAudio) {
         connectAudioToProxy(
           activeStreamForAudio
@@ -632,7 +663,7 @@ export default function Broadcaster() {
       );
 
       setError(
-        'Không thể truy cập nguồn video hoặc người dùng đã hủy'
+        'Không thể truy cập nguồn video hoặc người dùng đã hủy.'
       );
 
       return null;
@@ -640,87 +671,12 @@ export default function Broadcaster() {
   };
 
   // =========================================================
-  // SWITCH MODE
-  // =========================================================
-
-  const switchMode = async (newMode) => {
-    setError('');
-    setVideoSource(newMode);
-
-    const newStreams =
-      await getMediaStream(newMode);
-
-    if (!newStreams) return;
-
-    socket.emit(
-      'change-stream-mode',
-      {
-        broadcasterId: socket.id,
-        mode: newMode,
-      }
-    );
-
-    Object.keys(
-      peerConnections.current
-    ).forEach(async (watcherId) => {
-      const pc =
-        peerConnections.current[
-          watcherId
-        ];
-
-      if (!pc) return;
-
-      try {
-        // Remove old tracks
-        pc.getSenders().forEach(
-          (sender) => {
-            if (sender.track) {
-              pc.removeTrack(sender);
-            }
-          }
-        );
-
-        // Add new tracks
-        Object.values(newStreams).forEach(
-          (stream) => {
-            stream.getTracks().forEach(
-              (track) => {
-                pc.addTrack(
-                  track,
-                  stream
-                );
-              }
-            );
-          }
-        );
-
-        const offer =
-          await pc.createOffer();
-
-        await pc.setLocalDescription(
-          offer
-        );
-
-        socket.emit(
-          'offer',
-          watcherId,
-          pc.localDescription
-        );
-      } catch (e) {
-        console.error(
-          'Renegotiation failed:',
-          e
-        );
-      }
-    });
-  };
-
-  // =========================================================
   // TOGGLE VIDEO
   // =========================================================
 
   const toggleVideo = () => {
-    const newState = !videoEnabled;
+    const newState =
+      !videoEnabled;
 
     Object.values(
       currentStreams.current
@@ -737,8 +693,10 @@ export default function Broadcaster() {
     socket.emit(
       'media-state-changed',
       {
-        broadcasterId: socket.id,
-        videoEnabled: newState,
+        broadcasterId:
+          socket.id,
+        videoEnabled:
+          newState,
         audioEnabled,
       }
     );
@@ -749,7 +707,8 @@ export default function Broadcaster() {
   // =========================================================
 
   const toggleAudio = () => {
-    const newState = !audioEnabled;
+    const newState =
+      !audioEnabled;
 
     Object.values(
       currentStreams.current
@@ -766,9 +725,11 @@ export default function Broadcaster() {
     socket.emit(
       'media-state-changed',
       {
-        broadcasterId: socket.id,
+        broadcasterId:
+          socket.id,
         videoEnabled,
-        audioEnabled: newState,
+        audioEnabled:
+          newState,
       }
     );
   };
@@ -778,16 +739,228 @@ export default function Broadcaster() {
   // =========================================================
 
   const flipCamera = async () => {
+    // Screen không có camera
+    if (videoSource === 'screen') {
+      return;
+    }
+
     const newMode =
-      facingModeRef.current === 'user'
+      facingModeRef.current ===
+      'user'
         ? 'environment'
         : 'user';
 
-    facingModeRef.current = newMode;
+    try {
+      facingModeRef.current =
+        newMode;
 
-    setFacingMode(newMode);
+      setFacingMode(
+        newMode
+      );
 
-    await switchMode(videoSource);
+      /*
+        Khi livestream đang chạy:
+
+        Không được đổi videoSource.
+
+        Nhưng vẫn cho đổi camera trước/sau.
+      */
+
+      const cameraTracks = [];
+
+      Object.values(
+        currentStreams.current
+      ).forEach((stream) => {
+        stream
+          .getVideoTracks()
+          .forEach((track) => {
+            cameraTracks.push(
+              track
+            );
+          });
+      });
+
+      // Nếu camera đang được sử dụng
+      if (
+        videoSource ===
+        'camera'
+      ) {
+        const newCamera =
+          await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode:
+                newMode,
+            },
+            audio: false,
+          });
+
+        const newTrack =
+          newCamera.getVideoTracks()[0];
+
+        const oldStream =
+          currentStreams.current.camera;
+
+        const oldTrack =
+          oldStream?.getVideoTracks()[0];
+
+        // Thay track local
+        if (
+          oldTrack &&
+          oldStream
+        ) {
+          oldStream.removeTrack(
+            oldTrack
+          );
+
+          oldTrack.stop();
+
+          oldStream.addTrack(
+            newTrack
+          );
+        }
+
+        if (
+          localCameraVideo.current
+        ) {
+          localCameraVideo.current.srcObject =
+            oldStream;
+        }
+
+        // Replace track WebRTC
+        Object.values(
+          peerConnections.current
+        ).forEach((pc) => {
+          pc.getSenders().forEach(
+            (sender) => {
+              if (
+                sender.track &&
+                sender.track.kind ===
+                  'video'
+              ) {
+                sender
+                  .replaceTrack(
+                    newTrack
+                  )
+                  .catch((err) => {
+                    console.error(
+                      'Replace camera track error:',
+                      err
+                    );
+                  });
+              }
+            }
+          );
+        });
+
+        // Canvas sẽ tự đọc video mới
+        return;
+      }
+
+      // =====================================================
+      // BOTH
+      // =====================================================
+
+      if (
+        videoSource ===
+        'both'
+      ) {
+        const newCamera =
+          await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode:
+                newMode,
+            },
+            audio: false,
+          });
+
+        const newTrack =
+          newCamera.getVideoTracks()[0];
+
+        const oldStream =
+          currentStreams.current.camera;
+
+        const oldTrack =
+          oldStream?.getVideoTracks()[0];
+
+        if (
+          oldTrack &&
+          oldStream
+        ) {
+          oldStream.removeTrack(
+            oldTrack
+          );
+
+          oldTrack.stop();
+
+          oldStream.addTrack(
+            newTrack
+          );
+        }
+
+        if (
+          localCameraVideo.current
+        ) {
+          localCameraVideo.current.srcObject =
+            oldStream;
+        }
+
+        /*
+          Tìm sender camera.
+
+          Có 2 video track:
+
+          1. Screen
+          2. Camera
+
+          replaceTrack cho video sender
+          đang chứa camera.
+        */
+
+        Object.values(
+          peerConnections.current
+        ).forEach((pc) => {
+          const videoSenders =
+            pc
+              .getSenders()
+              .filter(
+                (sender) =>
+                  sender.track?.kind ===
+                  'video'
+              );
+
+          if (
+            videoSenders.length >
+            0
+          ) {
+            // Camera là video sender thứ 2
+            const cameraSender =
+              videoSenders[1];
+
+            if (cameraSender) {
+              cameraSender
+                .replaceTrack(
+                  newTrack
+                )
+                .catch((err) => {
+                  console.error(
+                    'Replace camera track error:',
+                    err
+                  );
+                });
+            }
+          }
+        });
+      }
+    } catch (err) {
+      console.error(
+        'Không thể đổi camera:',
+        err
+      );
+
+      setError(
+        'Không thể chuyển camera trước/sau.'
+      );
+    }
   };
 
   // =========================================================
@@ -815,17 +988,22 @@ export default function Broadcaster() {
         recordedChunksRef.current.length >
         0
       ) {
-        const blob = new Blob(
-          recordedChunksRef.current,
-          {
-            type: 'video/webm',
-          }
-        );
+        const blob =
+          new Blob(
+            recordedChunksRef.current,
+            {
+              type: 'video/webm',
+            }
+          );
 
         const url =
-          URL.createObjectURL(blob);
+          URL.createObjectURL(
+            blob
+          );
 
-        setRecordedVideoUrl(url);
+        setRecordedVideoUrl(
+          url
+        );
       }
     }, 600);
 
@@ -841,117 +1019,136 @@ export default function Broadcaster() {
 
     let mounted = true;
 
-    socket.emit('broadcaster', {
-      livestreamName: streamName,
-      userName,
-    });
+    // =======================================================
+    // REGISTER BROADCASTER
+    // =======================================================
 
-    getMediaStream(videoSource);
+    socket.emit(
+      'broadcaster',
+      {
+        livestreamName:
+          streamName,
+        userName,
+      }
+    );
+
+    // =======================================================
+    // GET MEDIA
+    // =======================================================
+
+    getMediaStream(
+      videoSource
+    );
 
     // =======================================================
     // WATCHER
     // =======================================================
 
-    const handleWatcher = async (
-      watcherId
-    ) => {
-      const pc =
-        new RTCPeerConnection({
-          iceServers: [
-            {
-              urls: [
-                'stun:hk-turn1.xirsys.com',
-              ],
-            },
-            {
-              username:
-                'aX_0HogGPHRGNvdzUm4KbELKRKa2e1-XXU7ykTjLzxPvYGtToLCCxE85kSodQr4uAAAAAGh001hkbHVvbmd0YQ==',
-              credential:
-                '3e8fc950-6098-11f0-9c7a-0242ac120004',
-              urls: [
-                'turn:hk-turn1.xirsys.com:80?transport=udp',
-                'turn:hk-turn1.xirsys.com:3478?transport=udp',
-                'turn:hk-turn1.xirsys.com:80?transport=tcp',
-                'turn:hk-turn1.xirsys.com:3478?transport=tcp',
-                'turns:hk-turn1.xirsys.com:443?transport=tcp',
-                'turns:hk-turn1.xirsys.com:5349?transport=tcp',
-              ],
-            },
-            {
-              urls:
-                'stun:stun.l.google.com:19302',
-            },
-          ],
+    const handleWatcher =
+      async (watcherId) => {
+        const pc =
+          new RTCPeerConnection({
+            iceServers: [
+              {
+                urls: [
+                  'stun:hk-turn1.xirsys.com',
+                ],
+              },
+              {
+                username:
+                  'aX_0HogGPHRGNvdzUm4KbELKRKa2e1-XXU7ykTjLzxPvYGtToLCCxE85kSodQr4uAAAAAGh001hkbHVvbmd0YQ==',
+                credential:
+                  '3e8fc950-6098-11f0-9c7a-0242ac120004',
+                urls: [
+                  'turn:hk-turn1.xirsys.com:80?transport=udp',
+                  'turn:hk-turn1.xirsys.com:3478?transport=udp',
+                  'turn:hk-turn1.xirsys.com:80?transport=tcp',
+                  'turn:hk-turn1.xirsys.com:3478?transport=tcp',
+                  'turns:hk-turn1.xirsys.com:443?transport=tcp',
+                  'turns:hk-turn1.xirsys.com:5349?transport=tcp',
+                ],
+              },
+              {
+                urls:
+                  'stun:stun.l.google.com:19302',
+              },
+            ],
+          });
+
+        peerConnections.current[
+          watcherId
+        ] = pc;
+
+        // ===================================================
+        // ADD CURRENT TRACKS
+        // ===================================================
+
+        Object.values(
+          currentStreams.current
+        ).forEach((stream) => {
+          stream
+            .getTracks()
+            .forEach((track) => {
+              pc.addTrack(
+                track,
+                stream
+              );
+            });
         });
 
-      peerConnections.current[
-        watcherId
-      ] = pc;
+        // ===================================================
+        // ICE
+        // ===================================================
 
-      // Add current tracks
-      Object.values(
-        currentStreams.current
-      ).forEach((stream) => {
-        stream.getTracks().forEach(
-          (track) => {
-            pc.addTrack(
-              track,
-              stream
+        pc.onicecandidate = (
+          e
+        ) => {
+          if (e.candidate) {
+            socket.emit(
+              'candidate',
+              watcherId,
+              e.candidate
             );
           }
-        );
-      });
+        };
 
-      pc.onicecandidate = (e) => {
-        if (e.candidate) {
+        // ===================================================
+        // CONNECTION STATE
+        // ===================================================
+
+        pc.onconnectionstatechange =
+          () => {
+            console.log(
+              'Broadcaster connection:',
+              watcherId,
+              pc.connectionState
+            );
+          };
+
+        // ===================================================
+        // OFFER
+        // ===================================================
+
+        try {
+          const offer =
+            await pc.createOffer();
+
+          await pc.setLocalDescription(
+            offer
+          );
+
           socket.emit(
-            'candidate',
+            'offer',
             watcherId,
-            e.candidate
+            pc.localDescription
+          );
+        } catch (err) {
+          console.error(
+            'Create offer error:',
+            err
           );
         }
       };
-
-      pc.onconnectionstatechange = () => {
-        console.log(
-          'Broadcaster connection:',
-          watcherId,
-          pc.connectionState
-        );
-
-        if (
-          pc.connectionState ===
-            'failed' ||
-          pc.connectionState ===
-            'closed' ||
-          pc.connectionState ===
-            'disconnected'
-        ) {
-          // Không cần xóa ngay disconnected,
-          // WebRTC đôi khi tự reconnect.
-        }
-      };
-
-      try {
-        const offer =
-          await pc.createOffer();
-
-        await pc.setLocalDescription(
-          offer
-        );
-
-        socket.emit(
-          'offer',
-          watcherId,
-          pc.localDescription
-        );
-      } catch (err) {
-        console.error(
-          'Create offer error:',
-          err
-        );
-      }
-    };
 
     // =======================================================
     // ANSWER
@@ -962,7 +1159,9 @@ export default function Broadcaster() {
       description
     ) => {
       const pc =
-        peerConnections.current[id];
+        peerConnections.current[
+          id
+        ];
 
       if (!pc) return;
 
@@ -987,12 +1186,16 @@ export default function Broadcaster() {
       candidate
     ) => {
       const pc =
-        peerConnections.current[id];
+        peerConnections.current[
+          id
+        ];
 
       if (!pc) return;
 
       pc.addIceCandidate(
-        new RTCIceCandidate(candidate)
+        new RTCIceCandidate(
+          candidate
+        )
       ).catch((err) => {
         console.error(
           'addIceCandidate error:',
@@ -1005,32 +1208,34 @@ export default function Broadcaster() {
     // DISCONNECT PEER
     // =======================================================
 
-    const handleDisconnectPeer = (
-      id
-    ) => {
-      const pc =
-        peerConnections.current[id];
+    const handleDisconnectPeer =
+      (id) => {
+        const pc =
+          peerConnections.current[
+            id
+          ];
 
-      if (pc) {
-        pc.close();
+        if (pc) {
+          pc.close();
 
-        delete peerConnections.current[
-          id
-        ];
-      }
-    };
+          delete peerConnections.current[
+            id
+          ];
+        }
+      };
 
     // =======================================================
     // VIEWER COUNT
     // =======================================================
 
-    const handleViewerCount = (
-      count
-    ) => {
-      if (mounted) {
-        setViewerCount(count);
-      }
-    };
+    const handleViewerCount =
+      (count) => {
+        if (mounted) {
+          setViewerCount(
+            count
+          );
+        }
+      };
 
     socket.on(
       'watcher',
@@ -1056,6 +1261,10 @@ export default function Broadcaster() {
       'viewerCount',
       handleViewerCount
     );
+
+    // =======================================================
+    // CLEANUP
+    // =======================================================
 
     return () => {
       mounted = false;
@@ -1101,25 +1310,30 @@ export default function Broadcaster() {
   // START STREAM
   // =========================================================
 
-  const handleStartStream = () => {
-    if (
-      !streamName.trim() ||
-      !userName.trim()
-    ) {
-      setError(
-        'Vui lòng nhập đủ thông tin'
+  const handleStartStream =
+    () => {
+      if (
+        !streamName.trim() ||
+        !userName.trim()
+      ) {
+        setError(
+          'Vui lòng nhập đủ thông tin'
+        );
+
+        return;
+      }
+
+      setError('');
+
+      setRecordedVideoUrl(
+        null
       );
 
-      return;
-    }
+      recordedChunksRef.current =
+        [];
 
-    setError('');
-    setRecordedVideoUrl(null);
-
-    recordedChunksRef.current = [];
-
-    setIsStreaming(true);
-  };
+      setIsStreaming(true);
+    };
 
   // =========================================================
   // UI
@@ -1128,14 +1342,22 @@ export default function Broadcaster() {
   return (
     <div>
       {!isStreaming ? (
+        // =====================================================
+        // SETUP
+        // =====================================================
+
         <div>
-          <h2>Thiết lập Livestream</h2>
+          <h2>
+            Thiết lập Livestream
+          </h2>
 
           <input
             placeholder="Tên bạn"
             value={userName}
             onChange={(e) =>
-              setUserName(e.target.value)
+              setUserName(
+                e.target.value
+              )
             }
             style={{
               width: '100%',
@@ -1149,7 +1371,9 @@ export default function Broadcaster() {
             placeholder="Tên livestream"
             value={streamName}
             onChange={(e) =>
-              setStreamName(e.target.value)
+              setStreamName(
+                e.target.value
+              )
             }
             style={{
               width: '100%',
@@ -1158,6 +1382,10 @@ export default function Broadcaster() {
               fontSize: 16,
             }}
           />
+
+          {/* =================================================
+              CHỌN CHẾ ĐỘ TRƯỚC KHI LIVESTREAM
+          ================================================= */}
 
           <select
             value={videoSource}
@@ -1186,7 +1414,9 @@ export default function Broadcaster() {
             </option>
           </select>
 
-          {videoSource !== 'screen' && (
+          {/* Camera trước/sau */}
+          {videoSource !==
+            'screen' && (
             <select
               value={facingMode}
               onChange={(e) => {
@@ -1238,10 +1468,15 @@ export default function Broadcaster() {
               color: 'white',
               border: 'none',
               borderRadius: 4,
+              cursor: 'pointer',
             }}
           >
             Bắt đầu livestream
           </button>
+
+          {/* =================================================
+              RECORDED VIDEO
+          ================================================= */}
 
           {recordedVideoUrl && (
             <div
@@ -1278,13 +1513,17 @@ export default function Broadcaster() {
               />
 
               <a
-                href={recordedVideoUrl}
+                href={
+                  recordedVideoUrl
+                }
                 download={`Livestream_${
-                  streamName || 'Record'
+                  streamName ||
+                  'Record'
                 }.webm`}
                 style={{
                   display: 'block',
-                  textAlign: 'center',
+                  textAlign:
+                    'center',
                   backgroundColor:
                     '#10b981',
                   color: 'white',
@@ -1292,7 +1531,8 @@ export default function Broadcaster() {
                   borderRadius: 4,
                   textDecoration:
                     'none',
-                  fontWeight: 'bold',
+                  fontWeight:
+                    'bold',
                 }}
               >
                 ⬇️ Tải Video Về Máy
@@ -1302,6 +1542,10 @@ export default function Broadcaster() {
           )}
         </div>
       ) : (
+        // =====================================================
+        // STREAMING
+        // =====================================================
+
         <div>
           <div
             style={{
@@ -1310,103 +1554,105 @@ export default function Broadcaster() {
             }}
           >
             Tên livestream:{' '}
-            <b>{streamName}</b> | Người
-            livestream: {userName} |
-            Viewers: {viewerCount}
+            <b>{streamName}</b>{' '}
+            | Người livestream:{' '}
+            {userName} | Viewers:{' '}
+            {viewerCount}
           </div>
 
-          {/* MODE BUTTONS */}
+          {/* =================================================
+              HIỂN THỊ CHẾ ĐỘ ĐANG DÙNG
+              KHÔNG CÓ NÚT ĐỔI CHẾ ĐỘ
+          ================================================= */}
 
           <div
             style={{
               marginBottom: 10,
-              display: 'flex',
-              gap: 10,
+              padding: '8px 12px',
+              background:
+                '#f5f5f5',
+              borderRadius: 6,
+              fontSize: 14,
+              color: '#555',
             }}
           >
-            <button
-              disabled={
-                videoSource === 'camera'
-              }
-              onClick={() =>
-                switchMode('camera')
-              }
-              style={{
-                flex: 1,
-                padding: 5,
-              }}
-            >
-              📷 Camera
-            </button>
+            Chế độ:{' '}
+            <b>
+              {videoSource ===
+                'camera' &&
+                '📷 Camera'}
 
-            <button
-              disabled={
-                videoSource === 'screen'
-              }
-              onClick={() =>
-                switchMode('screen')
-              }
-              style={{
-                flex: 1,
-                padding: 5,
-              }}
-            >
-              🖥 Screen
-            </button>
+              {videoSource ===
+                'screen' &&
+                '🖥 Màn hình'}
 
-            <button
-              disabled={
-                videoSource === 'both'
-              }
-              onClick={() =>
-                switchMode('both')
-              }
+              {videoSource ===
+                'both' &&
+                '📷 + 🖥 Camera + Màn hình'}
+            </b>
+
+            <span
               style={{
-                flex: 1,
-                padding: 5,
+                marginLeft: 8,
+                color: '#999',
               }}
             >
-              📷 + 🖥 Both
-            </button>
+              (Không thể thay đổi khi
+              đang livestream)
+            </span>
           </div>
 
-          {/* PREVIEW */}
+          {/* =================================================
+              PREVIEW
+          ================================================= */}
 
           <div
             style={{
-              position: 'relative',
+              position:
+                'relative',
               width: '100%',
-              maxWidth: isPortrait
-                ? '100%'
-                : '900px',
+              maxWidth:
+                isPortrait
+                  ? '100%'
+                  : '900px',
               margin: '0 auto',
-              aspectRatio: isPortrait
-                ? '9/16'
-                : '4/3',
-              maxHeight: '85vh',
-              background: '#000',
+              aspectRatio:
+                isPortrait
+                  ? '9/16'
+                  : '4/3',
+              maxHeight:
+                '85vh',
+              background:
+                '#000',
               borderRadius: 8,
-              overflow: 'hidden',
+              overflow:
+                'hidden',
             }}
           >
+            {/* STATUS */}
             <div
               style={{
-                position: 'absolute',
+                position:
+                  'absolute',
                 top: 10,
                 left: 10,
                 zIndex: 30,
-                display: 'flex',
+                display:
+                  'flex',
                 gap: 10,
               }}
             >
               {!videoEnabled && (
                 <span
                   style={{
-                    background: 'red',
-                    color: 'white',
+                    background:
+                      'red',
+                    color:
+                      'white',
                     padding:
                       '4px 8px',
-                    borderRadius: 4,
+                    borderRadius:
+                      4,
                   }}
                 >
                   📷 Cam Off
@@ -1416,11 +1662,14 @@ export default function Broadcaster() {
               {!audioEnabled && (
                 <span
                   style={{
-                    background: 'red',
-                    color: 'white',
+                    background:
+                      'red',
+                    color:
+                      'white',
                     padding:
                       '4px 8px',
-                    borderRadius: 4,
+                    borderRadius:
+                      4,
                   }}
                 >
                   🔇 Mic Off
@@ -1428,54 +1677,69 @@ export default function Broadcaster() {
               )}
             </div>
 
-            {/* CAMERA */}
+            {/* =================================================
+                CAMERA
+            ================================================= */}
 
             {videoSource ===
               'camera' && (
               <video
-                ref={localCameraVideo}
+                ref={
+                  localCameraVideo
+                }
                 autoPlay
                 muted
                 playsInline
                 style={{
                   width: '100%',
                   height: '100%',
-                  objectFit: 'cover',
+                  objectFit:
+                    'cover',
                 }}
               />
             )}
 
-            {/* SCREEN */}
+            {/* =================================================
+                SCREEN
+            ================================================= */}
 
             {videoSource ===
               'screen' && (
               <video
-                ref={localScreenVideo}
+                ref={
+                  localScreenVideo
+                }
                 autoPlay
                 muted
                 playsInline
                 style={{
                   width: '100%',
                   height: '100%',
-                  objectFit: 'cover',
+                  objectFit:
+                    'cover',
                 }}
               />
             )}
 
-            {/* BOTH */}
+            {/* =================================================
+                BOTH
+            ================================================= */}
 
             {videoSource ===
               'both' && (
               <>
                 <video
-                  ref={localScreenVideo}
+                  ref={
+                    localScreenVideo
+                  }
                   autoPlay
                   muted
                   playsInline
                   style={{
                     width: '100%',
                     height: '100%',
-                    objectFit: 'cover',
+                    objectFit:
+                      'cover',
                   }}
                 />
 
@@ -1488,7 +1752,8 @@ export default function Broadcaster() {
                     width: '28%',
                     aspectRatio:
                       '4/3',
-                    borderRadius: 8,
+                    borderRadius:
+                      8,
                     overflow:
                       'hidden',
                     boxShadow:
@@ -1508,8 +1773,10 @@ export default function Broadcaster() {
                     muted
                     playsInline
                     style={{
-                      width: '100%',
-                      height: '100%',
+                      width:
+                        '100%',
+                      height:
+                        '100%',
                       objectFit:
                         'cover',
                     }}
@@ -1519,17 +1786,23 @@ export default function Broadcaster() {
             )}
           </div>
 
-          {/* CONTROLS */}
+          {/* =================================================
+              CONTROLS
+          ================================================= */}
 
           <div
             style={{
               marginTop: 10,
-              display: 'flex',
+              display:
+                'flex',
               gap: 10,
             }}
           >
+            {/* VIDEO */}
             <button
-              onClick={toggleVideo}
+              onClick={
+                toggleVideo
+              }
               style={{
                 flex: 1,
                 padding:
@@ -1538,9 +1811,14 @@ export default function Broadcaster() {
                   videoEnabled
                     ? '#52c41a'
                     : '#ff4d4f',
-                color: 'white',
-                border: 'none',
-                borderRadius: 4,
+                color:
+                  'white',
+                border:
+                  'none',
+                borderRadius:
+                  4,
+                cursor:
+                  'pointer',
               }}
             >
               {videoEnabled
@@ -1548,8 +1826,11 @@ export default function Broadcaster() {
                 : 'Bật hình'}
             </button>
 
+            {/* AUDIO */}
             <button
-              onClick={toggleAudio}
+              onClick={
+                toggleAudio
+              }
               style={{
                 flex: 1,
                 padding:
@@ -1558,9 +1839,14 @@ export default function Broadcaster() {
                   audioEnabled
                     ? '#1890ff'
                     : '#ff4d4f',
-                color: 'white',
-                border: 'none',
-                borderRadius: 4,
+                color:
+                  'white',
+                border:
+                  'none',
+                borderRadius:
+                  4,
+                cursor:
+                  'pointer',
               }}
             >
               {audioEnabled
@@ -1568,8 +1854,11 @@ export default function Broadcaster() {
                 : 'Bật tiếng'}
             </button>
 
+            {/* FLIP CAMERA */}
             <button
-              onClick={flipCamera}
+              onClick={
+                flipCamera
+              }
               disabled={
                 videoSource ===
                 'screen'
@@ -1588,8 +1877,10 @@ export default function Broadcaster() {
                   'screen'
                     ? '#888'
                     : 'white',
-                border: 'none',
-                borderRadius: 4,
+                border:
+                  'none',
+                borderRadius:
+                  4,
                 cursor:
                   videoSource ===
                   'screen'
@@ -1604,11 +1895,19 @@ export default function Broadcaster() {
             </button>
           </div>
 
+          {/* =================================================
+              CHAT
+          ================================================= */}
+
           <Chat
             broadcasterId={
               socket.id
             }
           />
+
+          {/* =================================================
+              STOP
+          ================================================= */}
 
           <button
             onClick={
@@ -1618,11 +1917,16 @@ export default function Broadcaster() {
               marginTop: 10,
               backgroundColor:
                 '#ff4d4f',
-              color: 'white',
-              border: 'none',
+              color:
+                'white',
+              border:
+                'none',
               padding:
                 '10px 20px',
-              width: '100%',
+              width:
+                '100%',
+              cursor:
+                'pointer',
             }}
           >
             Dừng Livestream
