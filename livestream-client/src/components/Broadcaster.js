@@ -3,13 +3,15 @@ import { socket } from '../socket';
 import Chat from './Chat';
 
 export default function Broadcaster() {
-  const localScreenVideo = useRef();
-  const localCameraVideo = useRef();
+  const localScreenVideo = useRef(null);
+  const localCameraVideo = useRef(null);
+
   const peerConnections = useRef({});
   const currentStreams = useRef({});
 
   const mediaRecorderRef = useRef(null);
   const recordedChunksRef = useRef([]);
+
   const canvasRef = useRef(null);
   const workerRef = useRef(null);
 
@@ -31,56 +33,122 @@ export default function Broadcaster() {
   const audioDestinationRef = useRef(null);
   const audioSourceRef = useRef(null);
 
-  // Nhận diện màn hình đang là dọc (Mobile) hay ngang (PC)
-  const isPortrait = typeof window !== 'undefined' && window.innerHeight > window.innerWidth;
+  const isPortrait =
+    typeof window !== 'undefined' &&
+    window.innerHeight > window.innerWidth;
+
+  // =========================================================
+  // INIT
+  // =========================================================
 
   useEffect(() => {
     canvasRef.current = document.createElement('canvas');
 
-    const AudioContext = window.AudioContext || window.webkitAudioContext;
-    audioContextRef.current = new AudioContext();
-    audioDestinationRef.current = audioContextRef.current.createMediaStreamDestination();
+    const AudioContext =
+      window.AudioContext || window.webkitAudioContext;
+
+    if (AudioContext) {
+      audioContextRef.current = new AudioContext();
+
+      audioDestinationRef.current =
+        audioContextRef.current.createMediaStreamDestination();
+    }
 
     return () => {
       stopAll();
-      if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+
+      if (
+        audioContextRef.current &&
+        audioContextRef.current.state !== 'closed'
+      ) {
         audioContextRef.current.close();
       }
     };
   }, []);
 
+  // =========================================================
+  // STOP ALL MEDIA
+  // =========================================================
+
   const stopAll = () => {
+    // Stop worker
     if (workerRef.current) {
       workerRef.current.postMessage('stop');
       workerRef.current.terminate();
       workerRef.current = null;
     }
-    Object.values(currentStreams.current).forEach((stream) =>
-      stream.getTracks().forEach((track) => track.stop())
-    );
+
+    // Stop all streams
+    Object.values(currentStreams.current).forEach((stream) => {
+      if (stream) {
+        stream.getTracks().forEach((track) => {
+          track.stop();
+        });
+      }
+    });
+
     currentStreams.current = {};
+
+    // Disconnect audio source
+    if (audioSourceRef.current) {
+      try {
+        audioSourceRef.current.disconnect();
+      } catch (e) {}
+
+      audioSourceRef.current = null;
+    }
+
+    if (localScreenVideo.current) {
+      localScreenVideo.current.srcObject = null;
+    }
+
+    if (localCameraVideo.current) {
+      localCameraVideo.current.srcObject = null;
+    }
   };
 
-  const drawToCanvas = (mode, screenVideo, cameraVideo, width = 1280, height = 720) => {
+  // =========================================================
+  // DRAW COVER
+  // =========================================================
+
+  const drawToCanvas = (
+    mode,
+    screenVideo,
+    cameraVideo,
+    width = 1280,
+    height = 720
+  ) => {
     const canvas = canvasRef.current;
+
     if (!canvas) return;
+
     canvas.width = width;
     canvas.height = height;
+
     const ctx = canvas.getContext('2d');
+
+    if (!ctx) return;
 
     if (workerRef.current) {
       workerRef.current.postMessage('stop');
       workerRef.current.terminate();
+      workerRef.current = null;
     }
 
-    // FIX LÕI ĐEN 2 BÊN: Hàm vẽ mô phỏng object-fit: cover để video luôn tràn viền
     const drawCover = (context, video, x, y, w, h) => {
+      if (!video) return;
       if (!video.videoWidth || !video.videoHeight) return;
-      const videoRatio = video.videoWidth / video.videoHeight;
+
+      const videoRatio =
+        video.videoWidth / video.videoHeight;
+
       const targetRatio = w / h;
+
       let sWidth = video.videoWidth;
       let sHeight = video.videoHeight;
-      let sx = 0, sy = 0;
+
+      let sx = 0;
+      let sy = 0;
 
       if (videoRatio > targetRatio) {
         sWidth = sHeight * targetRatio;
@@ -89,22 +157,46 @@ export default function Broadcaster() {
         sHeight = sWidth / targetRatio;
         sy = (video.videoHeight - sHeight) / 2;
       }
-      context.drawImage(video, sx, sy, sWidth, sHeight, x, y, w, h);
+
+      context.drawImage(
+        video,
+        sx,
+        sy,
+        sWidth,
+        sHeight,
+        x,
+        y,
+        w,
+        h
+      );
     };
 
     const workerCode = `
-      let timer;
+      let timer = null;
+
       self.onmessage = function(e) {
         if (e.data === 'start') {
-          timer = setInterval(() => self.postMessage('tick'), 33);
-        } else if (e.data === 'stop') {
           clearInterval(timer);
+
+          timer = setInterval(() => {
+            self.postMessage('tick');
+          }, 33);
+        }
+
+        if (e.data === 'stop') {
+          clearInterval(timer);
+          timer = null;
         }
       };
     `;
 
-    const blob = new Blob([workerCode], { type: 'application/javascript' });
-    const worker = new Worker(URL.createObjectURL(blob));
+    const blob = new Blob([workerCode], {
+      type: 'application/javascript',
+    });
+
+    const worker = new Worker(
+      URL.createObjectURL(blob)
+    );
 
     worker.onmessage = () => {
       if (!canvas || !ctx) return;
@@ -112,194 +204,627 @@ export default function Broadcaster() {
       ctx.fillStyle = '#000000';
       ctx.fillRect(0, 0, width, height);
 
-      // Sử dụng drawCover thay vì drawImage bình thường
-      if ((mode === 'screen' || mode === 'both') && screenVideo && screenVideo.readyState >= 2) {
-        drawCover(ctx, screenVideo, 0, 0, width, height);
+      // SCREEN
+      if (
+        (mode === 'screen' || mode === 'both') &&
+        screenVideo &&
+        screenVideo.readyState >= 2
+      ) {
+        drawCover(
+          ctx,
+          screenVideo,
+          0,
+          0,
+          width,
+          height
+        );
       }
 
-      if (mode === 'camera' && cameraVideo && cameraVideo.readyState >= 2) {
-        drawCover(ctx, cameraVideo, 0, 0, width, height);
+      // CAMERA ONLY
+      if (
+        mode === 'camera' &&
+        cameraVideo &&
+        cameraVideo.readyState >= 2
+      ) {
+        drawCover(
+          ctx,
+          cameraVideo,
+          0,
+          0,
+          width,
+          height
+        );
       }
 
-      if (mode === 'both' && cameraVideo && cameraVideo.readyState >= 2) {
+      // CAMERA OVERLAY
+      if (
+        mode === 'both' &&
+        cameraVideo &&
+        cameraVideo.readyState >= 2
+      ) {
         const camWidth = width * 0.3;
-        const camHeight = camWidth * (3 / 4);        
+        const camHeight = camWidth * (3 / 4);
+
         const padding = 6;
-        const x = width - camWidth - padding;
-        const y = height - camHeight - padding;
+
+        const x =
+          width - camWidth - padding;
+
+        const y =
+          height - camHeight - padding;
 
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 4;
-        ctx.strokeRect(x, y, camWidth, camHeight);
-        drawCover(ctx, cameraVideo, x, y, camWidth, camHeight);
+
+        ctx.strokeRect(
+          x,
+          y,
+          camWidth,
+          camHeight
+        );
+
+        drawCover(
+          ctx,
+          cameraVideo,
+          x,
+          y,
+          camWidth,
+          camHeight
+        );
       }
     };
 
     worker.postMessage('start');
+
     workerRef.current = worker;
   };
 
+  // =========================================================
+  // AUDIO
+  // =========================================================
+
   const connectAudioToProxy = (stream) => {
+    if (!audioContextRef.current) return;
+    if (!audioDestinationRef.current) return;
+
     if (audioSourceRef.current) {
-      audioSourceRef.current.disconnect();
+      try {
+        audioSourceRef.current.disconnect();
+      } catch (e) {}
+
       audioSourceRef.current = null;
     }
-    if (stream.getAudioTracks().length > 0) {
-      if (audioContextRef.current.state === 'suspended') {
+
+    const audioTracks = stream?.getAudioTracks() || [];
+
+    if (audioTracks.length === 0) return;
+
+    try {
+      if (
+        audioContextRef.current.state ===
+        'suspended'
+      ) {
         audioContextRef.current.resume();
       }
-      audioSourceRef.current = audioContextRef.current.createMediaStreamSource(stream);
-      audioSourceRef.current.connect(audioDestinationRef.current);
+
+      audioSourceRef.current =
+        audioContextRef.current.createMediaStreamSource(
+          stream
+        );
+
+      audioSourceRef.current.connect(
+        audioDestinationRef.current
+      );
+    } catch (err) {
+      console.error(
+        'Không thể kết nối microphone:',
+        err
+      );
     }
   };
 
+  // =========================================================
+  // RECORDING
+  // =========================================================
+
   const startProxyRecording = () => {
-    if (!canvasRef.current || !audioDestinationRef.current) return;
+    if (!canvasRef.current) return;
+    if (!audioDestinationRef.current) return;
 
-    const canvasTrack = canvasRef.current.captureStream(30).getVideoTracks()[0];
-    const audioTrack = audioDestinationRef.current.stream.getAudioTracks()[0];
+    try {
+      const canvasStream =
+        canvasRef.current.captureStream(30);
 
-    const proxyStream = new MediaStream([canvasTrack, audioTrack]);
-    initMediaRecorder(proxyStream);
+      const canvasTrack =
+        canvasStream.getVideoTracks()[0];
+
+      const audioTrack =
+        audioDestinationRef.current.stream.getAudioTracks()[0];
+
+      if (!canvasTrack) {
+        console.error('Không có canvas video track');
+        return;
+      }
+
+      const tracks = [canvasTrack];
+
+      if (audioTrack) {
+        tracks.push(audioTrack);
+      }
+
+      const proxyStream =
+        new MediaStream(tracks);
+
+      initMediaRecorder(proxyStream);
+    } catch (err) {
+      console.error(
+        'Không thể tạo recording stream:',
+        err
+      );
+    }
   };
 
   const initMediaRecorder = (streamToRecord) => {
     if (!streamToRecord) return;
+
     try {
-      const recorder = new MediaRecorder(streamToRecord, { mimeType: 'video/webm' });
+      let mimeType = 'video/webm';
+
+      if (
+        MediaRecorder.isTypeSupported(
+          'video/webm;codecs=vp9,opus'
+        )
+      ) {
+        mimeType =
+          'video/webm;codecs=vp9,opus';
+      } else if (
+        MediaRecorder.isTypeSupported(
+          'video/webm;codecs=vp8,opus'
+        )
+      ) {
+        mimeType =
+          'video/webm;codecs=vp8,opus';
+      }
+
+      const recorder = new MediaRecorder(
+        streamToRecord,
+        {
+          mimeType,
+        }
+      );
+
       recorder.ondataavailable = (e) => {
         if (e.data && e.data.size > 0) {
-          recordedChunksRef.current.push(e.data);
+          recordedChunksRef.current.push(
+            e.data
+          );
         }
       };
+
+      recorder.onerror = (e) => {
+        console.error(
+          'MediaRecorder error:',
+          e
+        );
+      };
+
       recorder.start(1000);
+
       mediaRecorderRef.current = recorder;
     } catch (err) {
-      console.error('Lỗi khi khởi tạo ghi hình:', err);
+      console.error(
+        'Lỗi khi khởi tạo ghi hình:',
+        err
+      );
     }
   };
+
+  // =========================================================
+  // GET MEDIA
+  // =========================================================
 
   const getMediaStream = async (source) => {
     try {
       stopAll();
+
       let newStreams = {};
       let activeStreamForAudio = null;
 
+      // =====================================================
+      // CAMERA
+      // =====================================================
+
       if (source === 'camera') {
-        const cam = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: facingModeRef.current },
-          audio: true
-        });
-        newStreams = { camera: cam };
+        const cam =
+          await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode:
+                facingModeRef.current,
+            },
+            audio: true,
+          });
+
+        newStreams = {
+          camera: cam,
+        };
+
         activeStreamForAudio = cam;
-        if (localCameraVideo.current) localCameraVideo.current.srcObject = cam;
-      } else if (source === 'screen') {
-        const scr = await navigator.mediaDevices.getDisplayMedia({ video: true });
-        const mic = await navigator.mediaDevices.getUserMedia({ audio: true });
-        const combinedStream = new MediaStream([
-          ...scr.getVideoTracks(),
-          ...mic.getAudioTracks()
-        ]);
-        newStreams = { screen: combinedStream };
-        activeStreamForAudio = combinedStream;
-        if (localScreenVideo.current) localScreenVideo.current.srcObject = combinedStream;
-      } else if (source === 'both') {
-        const scr = await navigator.mediaDevices.getDisplayMedia({ video: true });
-        const cam = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: facingModeRef.current },
-          audio: true
-        });
-        newStreams = { screen: scr, camera: cam };
-        activeStreamForAudio = cam;
-        if (localScreenVideo.current) localScreenVideo.current.srcObject = scr;
-        if (localCameraVideo.current) localCameraVideo.current.srcObject = cam;
+
+        if (localCameraVideo.current) {
+          localCameraVideo.current.srcObject =
+            cam;
+        }
       }
 
-      currentStreams.current = newStreams;
+      // =====================================================
+      // SCREEN
+      // =====================================================
 
-      if (activeStreamForAudio) connectAudioToProxy(activeStreamForAudio);
+      else if (source === 'screen') {
+        const scr =
+          await navigator.mediaDevices.getDisplayMedia({
+            video: true,
+          });
 
+        const mic =
+          await navigator.mediaDevices.getUserMedia({
+            audio: true,
+          });
 
-      const canvasWidth = isPortrait ? 720 : 1280;
-      const canvasHeight = isPortrait ? 1280 : 960;
+        const combinedStream =
+          new MediaStream([
+            ...scr.getVideoTracks(),
+            ...mic.getAudioTracks(),
+          ]);
 
+        newStreams = {
+          screen: combinedStream,
+        };
 
-      drawToCanvas(source, localScreenVideo.current, localCameraVideo.current, canvasWidth, canvasHeight);
+        activeStreamForAudio =
+          combinedStream;
 
-      if (!mediaRecorderRef.current || mediaRecorderRef.current.state === 'inactive') {
-        setTimeout(() => startProxyRecording(), 1000);
+        if (localScreenVideo.current) {
+          localScreenVideo.current.srcObject =
+            combinedStream;
+        }
+
+        // Nếu người dùng bấm Stop Sharing
+        scr.getVideoTracks()[0].onended =
+          () => {
+            console.log(
+              'Người dùng đã dừng chia sẻ màn hình'
+            );
+
+            if (isStreaming) {
+              switchMode('camera');
+            }
+          };
+      }
+
+      // =====================================================
+      // BOTH
+      // =====================================================
+
+      else if (source === 'both') {
+        // Screen chỉ lấy video
+        const scr =
+          await navigator.mediaDevices.getDisplayMedia({
+            video: true,
+          });
+
+        // Camera lấy video + microphone
+        const cam =
+          await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode:
+                facingModeRef.current,
+            },
+            audio: true,
+          });
+
+        /*
+          QUAN TRỌNG:
+
+          Screen stream:
+            - Screen video
+            - Microphone audio
+
+          Camera stream:
+            - Camera video
+
+          Như vậy WebRTC sẽ gửi:
+
+            Video #1 = Screen
+            Audio #1 = Microphone
+            Video #2 = Camera
+        */
+
+        const screenStream =
+          new MediaStream([
+            ...scr.getVideoTracks(),
+            ...cam.getAudioTracks(),
+          ]);
+
+        const cameraStream =
+          new MediaStream([
+            ...cam.getVideoTracks(),
+          ]);
+
+        newStreams = {
+          screen: screenStream,
+          camera: cameraStream,
+        };
+
+        activeStreamForAudio =
+          screenStream;
+
+        if (localScreenVideo.current) {
+          localScreenVideo.current.srcObject =
+            screenStream;
+        }
+
+        if (localCameraVideo.current) {
+          localCameraVideo.current.srcObject =
+            cameraStream;
+        }
+
+        // User dừng screen sharing
+        scr.getVideoTracks()[0].onended =
+          () => {
+            console.log(
+              'Người dùng đã dừng chia sẻ màn hình'
+            );
+
+            if (isStreaming) {
+              switchMode('camera');
+            }
+          };
+      }
+
+      currentStreams.current =
+        newStreams;
+
+      // Connect microphone
+      if (activeStreamForAudio) {
+        connectAudioToProxy(
+          activeStreamForAudio
+        );
+      }
+
+      // =====================================================
+      // CANVAS
+      // =====================================================
+
+      const canvasWidth =
+        isPortrait ? 720 : 1280;
+
+      const canvasHeight =
+        isPortrait ? 1280 : 960;
+
+      drawToCanvas(
+        source,
+        localScreenVideo.current,
+        localCameraVideo.current,
+        canvasWidth,
+        canvasHeight
+      );
+
+      // =====================================================
+      // RECORD
+      // =====================================================
+
+      if (
+        !mediaRecorderRef.current ||
+        mediaRecorderRef.current.state ===
+          'inactive'
+      ) {
+        setTimeout(() => {
+          startProxyRecording();
+        }, 1000);
       }
 
       return newStreams;
     } catch (err) {
-      console.error('Error getting media:', err);
-      setError('Không thể truy cập nguồn video hoặc người dùng đã hủy');
+      console.error(
+        'Error getting media:',
+        err
+      );
+
+      setError(
+        'Không thể truy cập nguồn video hoặc người dùng đã hủy'
+      );
+
       return null;
     }
   };
 
+  // =========================================================
+  // SWITCH MODE
+  // =========================================================
+
   const switchMode = async (newMode) => {
+    setError('');
     setVideoSource(newMode);
-    const newStreams = await getMediaStream(newMode);
+
+    const newStreams =
+      await getMediaStream(newMode);
+
     if (!newStreams) return;
 
-    socket.emit('change-stream-mode', { broadcasterId: socket.id, mode: newMode });
+    socket.emit(
+      'change-stream-mode',
+      {
+        broadcasterId: socket.id,
+        mode: newMode,
+      }
+    );
 
-    Object.keys(peerConnections.current).forEach(async (watcherId) => {
-      const pc = peerConnections.current[watcherId];
-      pc.getSenders().forEach((sender) => pc.removeTrack(sender));
-      Object.values(newStreams).forEach((stream) => {
-        stream.getTracks().forEach((track) => pc.addTrack(track, stream));
-      });
+    Object.keys(
+      peerConnections.current
+    ).forEach(async (watcherId) => {
+      const pc =
+        peerConnections.current[
+          watcherId
+        ];
+
+      if (!pc) return;
 
       try {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        socket.emit('offer', watcherId, pc.localDescription);
+        // Remove old tracks
+        pc.getSenders().forEach(
+          (sender) => {
+            if (sender.track) {
+              pc.removeTrack(sender);
+            }
+          }
+        );
+
+        // Add new tracks
+        Object.values(newStreams).forEach(
+          (stream) => {
+            stream.getTracks().forEach(
+              (track) => {
+                pc.addTrack(
+                  track,
+                  stream
+                );
+              }
+            );
+          }
+        );
+
+        const offer =
+          await pc.createOffer();
+
+        await pc.setLocalDescription(
+          offer
+        );
+
+        socket.emit(
+          'offer',
+          watcherId,
+          pc.localDescription
+        );
       } catch (e) {
-        console.error("Renegotiation failed:", e);
+        console.error(
+          'Renegotiation failed:',
+          e
+        );
       }
     });
   };
 
+  // =========================================================
+  // TOGGLE VIDEO
+  // =========================================================
+
   const toggleVideo = () => {
     const newState = !videoEnabled;
-    Object.values(currentStreams.current).forEach((stream) => {
-      stream.getVideoTracks().forEach((track) => (track.enabled = newState));
+
+    Object.values(
+      currentStreams.current
+    ).forEach((stream) => {
+      stream
+        .getVideoTracks()
+        .forEach((track) => {
+          track.enabled = newState;
+        });
     });
+
     setVideoEnabled(newState);
-    socket.emit('media-state-changed', { broadcasterId: socket.id, videoEnabled: newState, audioEnabled });
+
+    socket.emit(
+      'media-state-changed',
+      {
+        broadcasterId: socket.id,
+        videoEnabled: newState,
+        audioEnabled,
+      }
+    );
   };
+
+  // =========================================================
+  // TOGGLE AUDIO
+  // =========================================================
 
   const toggleAudio = () => {
     const newState = !audioEnabled;
-    Object.values(currentStreams.current).forEach((stream) => {
-      stream.getAudioTracks().forEach((track) => (track.enabled = newState));
+
+    Object.values(
+      currentStreams.current
+    ).forEach((stream) => {
+      stream
+        .getAudioTracks()
+        .forEach((track) => {
+          track.enabled = newState;
+        });
     });
+
     setAudioEnabled(newState);
-    socket.emit('media-state-changed', { broadcasterId: socket.id, videoEnabled, audioEnabled: newState });
+
+    socket.emit(
+      'media-state-changed',
+      {
+        broadcasterId: socket.id,
+        videoEnabled,
+        audioEnabled: newState,
+      }
+    );
   };
 
+  // =========================================================
+  // FLIP CAMERA
+  // =========================================================
+
   const flipCamera = async () => {
-    const newMode = facingModeRef.current === 'user' ? 'environment' : 'user';
+    const newMode =
+      facingModeRef.current === 'user'
+        ? 'environment'
+        : 'user';
+
     facingModeRef.current = newMode;
+
     setFacingMode(newMode);
 
     await switchMode(videoSource);
   };
 
+  // =========================================================
+  // STOP STREAMING
+  // =========================================================
+
   const stopStreaming = () => {
-    socket.emit('stream-ended', socket.id);
+    socket.emit(
+      'stream-ended',
+      socket.id
+    );
+
     setIsStreaming(false);
 
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state !==
+        'inactive'
+    ) {
       mediaRecorderRef.current.stop();
     }
 
     setTimeout(() => {
-      if (recordedChunksRef.current.length > 0) {
-        const blob = new Blob(recordedChunksRef.current, { type: 'video/webm' });
-        const url = URL.createObjectURL(blob);
+      if (
+        recordedChunksRef.current.length >
+        0
+      ) {
+        const blob = new Blob(
+          recordedChunksRef.current,
+          {
+            type: 'video/webm',
+          }
+        );
+
+        const url =
+          URL.createObjectURL(blob);
+
         setRecordedVideoUrl(url);
       }
     }, 600);
@@ -307,225 +832,801 @@ export default function Broadcaster() {
     stopAll();
   };
 
+  // =========================================================
+  // STREAMING EFFECT
+  // =========================================================
+
   useEffect(() => {
     if (!isStreaming) return;
-    socket.emit('broadcaster', { livestreamName: streamName, userName });
+
+    let mounted = true;
+
+    socket.emit('broadcaster', {
+      livestreamName: streamName,
+      userName,
+    });
+
     getMediaStream(videoSource);
 
-    socket.on('watcher', async (watcherId) => {
-      const pc = new RTCPeerConnection({
-        iceServers: [
-          { urls: ['stun:hk-turn1.xirsys.com'] },
-          {
-            username:
-              'aX_0HogGPHRGNvdzUm4KbELKRKa2e1-XXU7ykTjLzxPvYGtToLCCxE85kSodQr4uAAAAAGh001hkbHVvbmd0YQ==',
-            credential: '3e8fc950-6098-11f0-9c7a-0242ac120004',
-            urls: [
-              'turn:hk-turn1.xirsys.com:80?transport=udp',
-              'turn:hk-turn1.xirsys.com:3478?transport=udp',
-              'turn:hk-turn1.xirsys.com:80?transport=tcp',
-              'turn:hk-turn1.xirsys.com:3478?transport=tcp',
-              'turns:hk-turn1.xirsys.com:443?transport=tcp',
-              'turns:hk-turn1.xirsys.com:5349?transport=tcp',
-            ],
-          },
-          { urls: 'stun:stun.l.google.com:19302' },
-        ],
+    // =======================================================
+    // WATCHER
+    // =======================================================
+
+    const handleWatcher = async (
+      watcherId
+    ) => {
+      const pc =
+        new RTCPeerConnection({
+          iceServers: [
+            {
+              urls: [
+                'stun:hk-turn1.xirsys.com',
+              ],
+            },
+            {
+              username:
+                'aX_0HogGPHRGNvdzUm4KbELKRKa2e1-XXU7ykTjLzxPvYGtToLCCxE85kSodQr4uAAAAAGh001hkbHVvbmd0YQ==',
+              credential:
+                '3e8fc950-6098-11f0-9c7a-0242ac120004',
+              urls: [
+                'turn:hk-turn1.xirsys.com:80?transport=udp',
+                'turn:hk-turn1.xirsys.com:3478?transport=udp',
+                'turn:hk-turn1.xirsys.com:80?transport=tcp',
+                'turn:hk-turn1.xirsys.com:3478?transport=tcp',
+                'turns:hk-turn1.xirsys.com:443?transport=tcp',
+                'turns:hk-turn1.xirsys.com:5349?transport=tcp',
+              ],
+            },
+            {
+              urls:
+                'stun:stun.l.google.com:19302',
+            },
+          ],
+        });
+
+      peerConnections.current[
+        watcherId
+      ] = pc;
+
+      // Add current tracks
+      Object.values(
+        currentStreams.current
+      ).forEach((stream) => {
+        stream.getTracks().forEach(
+          (track) => {
+            pc.addTrack(
+              track,
+              stream
+            );
+          }
+        );
       });
 
-      peerConnections.current[watcherId] = pc;
-
-      Object.values(currentStreams.current).forEach((stream) =>
-        stream.getTracks().forEach((track) => pc.addTrack(track, stream))
-      );
-
       pc.onicecandidate = (e) => {
-        if (e.candidate) socket.emit('candidate', watcherId, e.candidate);
+        if (e.candidate) {
+          socket.emit(
+            'candidate',
+            watcherId,
+            e.candidate
+          );
+        }
       };
 
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription(offer);
-      socket.emit('offer', watcherId, pc.localDescription);
-    });
+      pc.onconnectionstatechange = () => {
+        console.log(
+          'Broadcaster connection:',
+          watcherId,
+          pc.connectionState
+        );
 
-    socket.on('answer', (id, description) => {
-      const pc = peerConnections.current[id];
-      if (pc) pc.setRemoteDescription(new RTCSessionDescription(description));
-    });
+        if (
+          pc.connectionState ===
+            'failed' ||
+          pc.connectionState ===
+            'closed' ||
+          pc.connectionState ===
+            'disconnected'
+        ) {
+          // Không cần xóa ngay disconnected,
+          // WebRTC đôi khi tự reconnect.
+        }
+      };
 
-    socket.on('candidate', (id, candidate) => {
-      const pc = peerConnections.current[id];
-      if (pc) pc.addIceCandidate(new RTCIceCandidate(candidate));
-    });
+      try {
+        const offer =
+          await pc.createOffer();
 
-    socket.on('disconnectPeer', (id) => {
-      if (peerConnections.current[id]) {
-        peerConnections.current[id].close();
-        delete peerConnections.current[id];
+        await pc.setLocalDescription(
+          offer
+        );
+
+        socket.emit(
+          'offer',
+          watcherId,
+          pc.localDescription
+        );
+      } catch (err) {
+        console.error(
+          'Create offer error:',
+          err
+        );
       }
-    });
+    };
 
-    socket.on('viewerCount', (count) => setViewerCount(count));
+    // =======================================================
+    // ANSWER
+    // =======================================================
+
+    const handleAnswer = (
+      id,
+      description
+    ) => {
+      const pc =
+        peerConnections.current[id];
+
+      if (!pc) return;
+
+      pc.setRemoteDescription(
+        new RTCSessionDescription(
+          description
+        )
+      ).catch((err) => {
+        console.error(
+          'setRemoteDescription answer error:',
+          err
+        );
+      });
+    };
+
+    // =======================================================
+    // ICE CANDIDATE
+    // =======================================================
+
+    const handleCandidate = (
+      id,
+      candidate
+    ) => {
+      const pc =
+        peerConnections.current[id];
+
+      if (!pc) return;
+
+      pc.addIceCandidate(
+        new RTCIceCandidate(candidate)
+      ).catch((err) => {
+        console.error(
+          'addIceCandidate error:',
+          err
+        );
+      });
+    };
+
+    // =======================================================
+    // DISCONNECT PEER
+    // =======================================================
+
+    const handleDisconnectPeer = (
+      id
+    ) => {
+      const pc =
+        peerConnections.current[id];
+
+      if (pc) {
+        pc.close();
+
+        delete peerConnections.current[
+          id
+        ];
+      }
+    };
+
+    // =======================================================
+    // VIEWER COUNT
+    // =======================================================
+
+    const handleViewerCount = (
+      count
+    ) => {
+      if (mounted) {
+        setViewerCount(count);
+      }
+    };
+
+    socket.on(
+      'watcher',
+      handleWatcher
+    );
+
+    socket.on(
+      'answer',
+      handleAnswer
+    );
+
+    socket.on(
+      'candidate',
+      handleCandidate
+    );
+
+    socket.on(
+      'disconnectPeer',
+      handleDisconnectPeer
+    );
+
+    socket.on(
+      'viewerCount',
+      handleViewerCount
+    );
 
     return () => {
-      socket.off('watcher');
-      socket.off('answer');
-      socket.off('candidate');
-      socket.off('disconnectPeer');
-      socket.off('viewerCount');
-      Object.values(peerConnections.current).forEach((pc) => pc.close());
+      mounted = false;
+
+      socket.off(
+        'watcher',
+        handleWatcher
+      );
+
+      socket.off(
+        'answer',
+        handleAnswer
+      );
+
+      socket.off(
+        'candidate',
+        handleCandidate
+      );
+
+      socket.off(
+        'disconnectPeer',
+        handleDisconnectPeer
+      );
+
+      socket.off(
+        'viewerCount',
+        handleViewerCount
+      );
+
+      Object.values(
+        peerConnections.current
+      ).forEach((pc) => {
+        pc.close();
+      });
+
       peerConnections.current = {};
+
       stopAll();
     };
   }, [isStreaming]);
 
+  // =========================================================
+  // START STREAM
+  // =========================================================
+
   const handleStartStream = () => {
-    if (!streamName.trim() || !userName.trim()) {
-      setError('Vui lòng nhập đủ thông tin');
+    if (
+      !streamName.trim() ||
+      !userName.trim()
+    ) {
+      setError(
+        'Vui lòng nhập đủ thông tin'
+      );
+
       return;
     }
+
     setError('');
     setRecordedVideoUrl(null);
+
     recordedChunksRef.current = [];
+
     setIsStreaming(true);
   };
+
+  // =========================================================
+  // UI
+  // =========================================================
 
   return (
     <div>
       {!isStreaming ? (
         <div>
           <h2>Thiết lập Livestream</h2>
-          <input placeholder="Tên bạn" value={userName} onChange={(e) => setUserName(e.target.value)} style={{ width: '100%', marginBottom: 10, height: 40, fontSize: 16 }} />
-          <input placeholder="Tên livestream" value={streamName} onChange={(e) => setStreamName(e.target.value)} style={{ width: '100%', marginBottom: 10, height: 40, fontSize: 16 }} />
-          <select value={videoSource} onChange={(e) => setVideoSource(e.target.value)} style={{ width: '100%', marginBottom: 10, height: 45, fontSize: 16 }}>
-            <option value="camera">Chỉ Camera</option>
-            <option value="screen">Chỉ Màn hình</option>
-            <option value="both">Cả 2 (Màn hình chính + Camera phụ)</option>
+
+          <input
+            placeholder="Tên bạn"
+            value={userName}
+            onChange={(e) =>
+              setUserName(e.target.value)
+            }
+            style={{
+              width: '100%',
+              marginBottom: 10,
+              height: 40,
+              fontSize: 16,
+            }}
+          />
+
+          <input
+            placeholder="Tên livestream"
+            value={streamName}
+            onChange={(e) =>
+              setStreamName(e.target.value)
+            }
+            style={{
+              width: '100%',
+              marginBottom: 10,
+              height: 40,
+              fontSize: 16,
+            }}
+          />
+
+          <select
+            value={videoSource}
+            onChange={(e) =>
+              setVideoSource(
+                e.target.value
+              )
+            }
+            style={{
+              width: '100%',
+              marginBottom: 10,
+              height: 45,
+              fontSize: 16,
+            }}
+          >
+            <option value="camera">
+              📷 Chỉ Camera
+            </option>
+
+            <option value="screen">
+              🖥 Chỉ Màn hình
+            </option>
+
+            <option value="both">
+              📷 + 🖥 Cả 2
+            </option>
           </select>
+
           {videoSource !== 'screen' && (
             <select
               value={facingMode}
               onChange={(e) => {
-                setFacingMode(e.target.value);
-                facingModeRef.current = e.target.value;
+                setFacingMode(
+                  e.target.value
+                );
+
+                facingModeRef.current =
+                  e.target.value;
               }}
-              style={{ width: '100%', marginBottom: 10, height: 45, fontSize: 16 }}
+              style={{
+                width: '100%',
+                marginBottom: 10,
+                height: 45,
+                fontSize: 16,
+              }}
             >
-              <option value="user">Sử dụng Camera Trước</option>
-              <option value="environment">Sử dụng Camera Sau</option>
+              <option value="user">
+                Sử dụng Camera Trước
+              </option>
+
+              <option value="environment">
+                Sử dụng Camera Sau
+              </option>
             </select>
           )}
 
-          {error && <div style={{ color: 'red', marginBottom: 8 }}>{error}</div>}
-          <button onClick={handleStartStream} style={{ width: '100%', height: 45, fontSize: 16, backgroundColor: '#1890ff', color: 'white', border: 'none', borderRadius: 4 }}>Bắt đầu livestream</button>
-
-          {recordedVideoUrl && (
-            <div style={{ marginTop: 30, padding: 20, border: '2px dashed #10b981', borderRadius: 8, background: '#f9fafb' }}>
-              <h3 style={{ color: '#10b981', marginBottom: 15 }}>✨ Livestream của bạn đã được lưu hoàn chỉnh!</h3>
-              <video
-                src={recordedVideoUrl}
-                controls
-                style={{ width: '100%', borderRadius: 8, backgroundColor: '#000', marginBottom: 15 }}
-              />
-              <a
-                href={recordedVideoUrl}
-                download={`Livestream_${streamName || 'Record'}.webm`}
-                style={{ display: 'block', textAlign: 'center', backgroundColor: '#10b981', color: 'white', padding: '10px', borderRadius: 4, textDecoration: 'none', fontWeight: 'bold' }}
-              >
-                ⬇️ Tải Video Về Máy (.webm)
-              </a>
+          {error && (
+            <div
+              style={{
+                color: 'red',
+                marginBottom: 8,
+              }}
+            >
+              {error}
             </div>
           )}
 
+          <button
+            onClick={
+              handleStartStream
+            }
+            style={{
+              width: '100%',
+              height: 45,
+              fontSize: 16,
+              backgroundColor:
+                '#1890ff',
+              color: 'white',
+              border: 'none',
+              borderRadius: 4,
+            }}
+          >
+            Bắt đầu livestream
+          </button>
+
+          {recordedVideoUrl && (
+            <div
+              style={{
+                marginTop: 30,
+                padding: 20,
+                border:
+                  '2px dashed #10b981',
+                borderRadius: 8,
+                background:
+                  '#f9fafb',
+              }}
+            >
+              <h3
+                style={{
+                  color: '#10b981',
+                  marginBottom: 15,
+                }}
+              >
+                ✨ Livestream của bạn đã
+                được lưu hoàn chỉnh!
+              </h3>
+
+              <video
+                src={recordedVideoUrl}
+                controls
+                style={{
+                  width: '100%',
+                  borderRadius: 8,
+                  backgroundColor:
+                    '#000',
+                  marginBottom: 15,
+                }}
+              />
+
+              <a
+                href={recordedVideoUrl}
+                download={`Livestream_${
+                  streamName || 'Record'
+                }.webm`}
+                style={{
+                  display: 'block',
+                  textAlign: 'center',
+                  backgroundColor:
+                    '#10b981',
+                  color: 'white',
+                  padding: '10px',
+                  borderRadius: 4,
+                  textDecoration:
+                    'none',
+                  fontWeight: 'bold',
+                }}
+              >
+                ⬇️ Tải Video Về Máy
+                (.webm)
+              </a>
+            </div>
+          )}
         </div>
       ) : (
         <div>
-          <div style={{ fontSize: 14, marginBottom: 10 }}>
-            Tên livestream: <b>{streamName}</b> | Người livestream: {userName} | Viewers: {viewerCount}
+          <div
+            style={{
+              fontSize: 14,
+              marginBottom: 10,
+            }}
+          >
+            Tên livestream:{' '}
+            <b>{streamName}</b> | Người
+            livestream: {userName} |
+            Viewers: {viewerCount}
           </div>
 
-          <div style={{ marginBottom: 10, display: 'flex', gap: 10 }}>
-            <button disabled={videoSource === 'camera'} onClick={() => switchMode('camera')} style={{ flex: 1, padding: 5 }}>📷 Camera</button>
-            <button disabled={videoSource === 'screen'} onClick={() => switchMode('screen')} style={{ flex: 1, padding: 5 }}>🖥 Screen</button>
-            <button disabled={videoSource === 'both'} onClick={() => switchMode('both')} style={{ flex: 1, padding: 5 }}>📷 + 🖥 Both</button>
+          {/* MODE BUTTONS */}
+
+          <div
+            style={{
+              marginBottom: 10,
+              display: 'flex',
+              gap: 10,
+            }}
+          >
+            <button
+              disabled={
+                videoSource === 'camera'
+              }
+              onClick={() =>
+                switchMode('camera')
+              }
+              style={{
+                flex: 1,
+                padding: 5,
+              }}
+            >
+              📷 Camera
+            </button>
+
+            <button
+              disabled={
+                videoSource === 'screen'
+              }
+              onClick={() =>
+                switchMode('screen')
+              }
+              style={{
+                flex: 1,
+                padding: 5,
+              }}
+            >
+              🖥 Screen
+            </button>
+
+            <button
+              disabled={
+                videoSource === 'both'
+              }
+              onClick={() =>
+                switchMode('both')
+              }
+              style={{
+                flex: 1,
+                padding: 5,
+              }}
+            >
+              📷 + 🖥 Both
+            </button>
           </div>
 
-          <div style={{
-            position: 'relative',
-            width: '100%',
-            maxWidth: isPortrait ? '100%' : '900px',
-            margin: '0 auto', 
-            aspectRatio: isPortrait ? '9/16' : '4/3',
-            maxHeight: '85vh', 
-            background: '#000',
-            borderRadius: 8,
-            overflow: 'hidden'
-          }}>
-            <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 30, display: 'flex', gap: 10 }}>
-              {!videoEnabled && <span style={{ background: 'red', color: 'white', padding: '4px 8px', borderRadius: 4 }}>📷 Cam Off</span>}
-              {!audioEnabled && <span style={{ background: 'red', color: 'white', padding: '4px 8px', borderRadius: 4 }}>🔇 Mic Off</span>}
+          {/* PREVIEW */}
+
+          <div
+            style={{
+              position: 'relative',
+              width: '100%',
+              maxWidth: isPortrait
+                ? '100%'
+                : '900px',
+              margin: '0 auto',
+              aspectRatio: isPortrait
+                ? '9/16'
+                : '4/3',
+              maxHeight: '85vh',
+              background: '#000',
+              borderRadius: 8,
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                top: 10,
+                left: 10,
+                zIndex: 30,
+                display: 'flex',
+                gap: 10,
+              }}
+            >
+              {!videoEnabled && (
+                <span
+                  style={{
+                    background: 'red',
+                    color: 'white',
+                    padding:
+                      '4px 8px',
+                    borderRadius: 4,
+                  }}
+                >
+                  📷 Cam Off
+                </span>
+              )}
+
+              {!audioEnabled && (
+                <span
+                  style={{
+                    background: 'red',
+                    color: 'white',
+                    padding:
+                      '4px 8px',
+                    borderRadius: 4,
+                  }}
+                >
+                  🔇 Mic Off
+                </span>
+              )}
             </div>
 
-            {/* CHỈNH LẠI OBJECT-FIT: Dùng cover để tràn viền 100% trên giao diện preview */}
-            {videoSource === 'camera' && (
-              <video ref={localCameraVideo} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            {/* CAMERA */}
+
+            {videoSource ===
+              'camera' && (
+              <video
+                ref={localCameraVideo}
+                autoPlay
+                muted
+                playsInline
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                }}
+              />
             )}
 
-            {videoSource === 'screen' && (
-              <video ref={localScreenVideo} autoPlay muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            {/* SCREEN */}
+
+            {videoSource ===
+              'screen' && (
+              <video
+                ref={localScreenVideo}
+                autoPlay
+                muted
+                playsInline
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  objectFit: 'cover',
+                }}
+              />
             )}
 
-            {videoSource === 'both' && (
+            {/* BOTH */}
+
+            {videoSource ===
+              'both' && (
               <>
                 <video
                   ref={localScreenVideo}
-                  autoPlay muted playsInline
-                  style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  autoPlay
+                  muted
+                  playsInline
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                  }}
                 />
-                <div style={{
-                  position: 'absolute',
-                  bottom: '2px',
-                  right: '2px',
-                  width: '28%',
-                  aspectRatio: '4/3',
-                  borderRadius: 8,
-                  overflow: 'hidden',
-                  boxShadow: '0 4px 8px rgba(0,0,0,0.5)',
-                  border: '2px solid white',
-                  zIndex: 20,
-                  background: '#000'
-                }}>
+
+                <div
+                  style={{
+                    position:
+                      'absolute',
+                    bottom: '2px',
+                    right: '2px',
+                    width: '28%',
+                    aspectRatio:
+                      '4/3',
+                    borderRadius: 8,
+                    overflow:
+                      'hidden',
+                    boxShadow:
+                      '0 4px 8px rgba(0,0,0,0.5)',
+                    border:
+                      '2px solid white',
+                    zIndex: 20,
+                    background:
+                      '#000',
+                  }}
+                >
                   <video
-                    ref={localCameraVideo}
-                    autoPlay muted playsInline
-                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    ref={
+                      localCameraVideo
+                    }
+                    autoPlay
+                    muted
+                    playsInline
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit:
+                        'cover',
+                    }}
                   />
                 </div>
               </>
             )}
           </div>
 
-          <div style={{ marginTop: 10, display: 'flex', gap: 10 }}>
-            <button onClick={toggleVideo} style={{ flex: 1, padding: '10px 0', backgroundColor: videoEnabled ? '#52c41a' : '#ff4d4f', color: 'white', border: 'none', borderRadius: 4 }}>{videoEnabled ? 'Tắt hình' : 'Bật hình'}</button>
-            <button onClick={toggleAudio} style={{ flex: 1, padding: '10px 0', backgroundColor: audioEnabled ? '#1890ff' : '#ff4d4f', color: 'white', border: 'none', borderRadius: 4 }}>{audioEnabled ? 'Tắt tiếng' : 'Bật tiếng'}</button>
+          {/* CONTROLS */}
+
+          <div
+            style={{
+              marginTop: 10,
+              display: 'flex',
+              gap: 10,
+            }}
+          >
             <button
-              onClick={flipCamera}
-              disabled={videoSource === 'screen'}
+              onClick={toggleVideo}
               style={{
                 flex: 1,
-                padding: '10px 0',
-                backgroundColor: videoSource === 'screen' ? '#d9d9d9' : '#8a2be2',
-                color: videoSource === 'screen' ? '#888' : 'white',
+                padding:
+                  '10px 0',
+                backgroundColor:
+                  videoEnabled
+                    ? '#52c41a'
+                    : '#ff4d4f',
+                color: 'white',
                 border: 'none',
                 borderRadius: 4,
-                cursor: videoSource === 'screen' ? 'not-allowed' : 'pointer'
               }}
             >
-              {facingMode === 'user' ? 'Cam Trước' : 'Cam Sau'}
+              {videoEnabled
+                ? 'Tắt hình'
+                : 'Bật hình'}
+            </button>
+
+            <button
+              onClick={toggleAudio}
+              style={{
+                flex: 1,
+                padding:
+                  '10px 0',
+                backgroundColor:
+                  audioEnabled
+                    ? '#1890ff'
+                    : '#ff4d4f',
+                color: 'white',
+                border: 'none',
+                borderRadius: 4,
+              }}
+            >
+              {audioEnabled
+                ? 'Tắt tiếng'
+                : 'Bật tiếng'}
+            </button>
+
+            <button
+              onClick={flipCamera}
+              disabled={
+                videoSource ===
+                'screen'
+              }
+              style={{
+                flex: 1,
+                padding:
+                  '10px 0',
+                backgroundColor:
+                  videoSource ===
+                  'screen'
+                    ? '#d9d9d9'
+                    : '#8a2be2',
+                color:
+                  videoSource ===
+                  'screen'
+                    ? '#888'
+                    : 'white',
+                border: 'none',
+                borderRadius: 4,
+                cursor:
+                  videoSource ===
+                  'screen'
+                    ? 'not-allowed'
+                    : 'pointer',
+              }}
+            >
+              {facingMode ===
+              'user'
+                ? 'Cam Trước'
+                : 'Cam Sau'}
             </button>
           </div>
-          <Chat broadcasterId={socket.id} />
-          <button onClick={stopStreaming} style={{ marginTop: 10, backgroundColor: '#ff4d4f', color: 'white', border: 'none', padding: '10px 20px', width: '100%' }}>Dừng Livestream</button>
+
+          <Chat
+            broadcasterId={
+              socket.id
+            }
+          />
+
+          <button
+            onClick={
+              stopStreaming
+            }
+            style={{
+              marginTop: 10,
+              backgroundColor:
+                '#ff4d4f',
+              color: 'white',
+              border: 'none',
+              padding:
+                '10px 20px',
+              width: '100%',
+            }}
+          >
+            Dừng Livestream
+          </button>
         </div>
       )}
     </div>
