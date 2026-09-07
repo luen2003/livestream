@@ -1,4 +1,4 @@
-# 📺 Livestream
+# Livestream
 
 Ứng dụng livestream thời gian thực được xây dựng với **React**, **Node.js**, **Express**, **Socket.IO** và **WebRTC**.
 
@@ -6,17 +6,17 @@ Dự án cho phép người dùng tạo livestream bằng camera hoặc chia s�
 
 ---
 
-## ✨ Tính năng
+## Tính năng
 
-### 🎥 Livestream
+### Livestream
 
 Broadcaster có thể lựa chọn nhiều chế độ phát:
 
-- 📷 **Camera** — phát trực tiếp từ camera.
-- 🖥️ **Screen** — chia sẻ màn hình và microphone.
-- 📷 + 🖥️ **Both** — chia sẻ màn hình chính và camera phụ.
+- **Camera** — phát trực tiếp từ camera.
+- **Screen** — chia sẻ màn hình và microphone.
+- **Both** — chia sẻ màn hình chính và camera phụ.
 
-### 🎙️ Âm thanh
+### Âm thanh
 
 - Sử dụng microphone trực tiếp từ trình duyệt.
 - Bật/tắt microphone trong khi livestream.
@@ -24,21 +24,21 @@ Broadcaster có thể lựa chọn nhiều chế độ phát:
 - Viewer nhận âm thanh trực tiếp thông qua WebRTC.
 - Hạn chế echo bằng cách tắt tiếng video camera phụ.
 
-### 📷 Camera
+### Camera
 
 - Camera trước.
 - Camera sau trên thiết bị hỗ trợ.
 - Chuyển đổi camera trong khi livestream.
 - Bật/tắt camera.
 
-### 🖥️ Chia sẻ màn hình
+### Chia sẻ màn hình
 
 - Chia sẻ toàn bộ màn hình.
 - Chia sẻ cửa sổ ứng dụng.
 - Chia sẻ tab trình duyệt tùy theo trình duyệt.
 - Có thể kết hợp chia sẻ màn hình với camera.
 
-### 👥 Viewer
+### Viewer
 
 Viewer có thể:
 
@@ -50,7 +50,7 @@ Viewer có thể:
 - Nhận trạng thái bật/tắt camera và microphone.
 - Tự động nhận thông báo khi livestream kết thúc.
 
-### 💬 Chat thời gian thực
+### Chat thời gian thực
 
 Dự án sử dụng Socket.IO để hỗ trợ:
 
@@ -58,14 +58,12 @@ Dự án sử dụng Socket.IO để hỗ trợ:
 - Gửi tin nhắn theo livestream.
 - Cập nhật realtime.
 
-### 💾 Ghi hình livestream
+### Ghi hình livestream
 
 Broadcaster có thể ghi lại livestream bằng:
 
 - `MediaRecorder`
-- `Canvas`
 - `MediaStream`
-- `Web Audio API`
 
 Video sau khi livestream kết thúc có thể được xem và tải xuống dưới dạng:
 
