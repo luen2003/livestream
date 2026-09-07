@@ -516,7 +516,7 @@ export default function Broadcaster() {
                 cursor: videoSource === 'screen' ? 'not-allowed' : 'pointer'
               }}
             >
-              {facingMode === 'user' ? 'Cam Trước' : 'Cam Sau'}
+              {facingMode === 'user' ? 'Lật Cam' : 'Lật Cam'}
             </button>
           </div>
           <Chat broadcasterId={socket.id} />
