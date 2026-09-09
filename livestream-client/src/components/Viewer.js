@@ -450,7 +450,7 @@ const styles = {
     width: '100%',
     fontSize: 14,
     marginBottom: 5,
-    fontWeight: '500',
+    fontWeight: 500,
   },
 
   videoContainer: {
