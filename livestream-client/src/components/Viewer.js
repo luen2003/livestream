@@ -405,7 +405,7 @@ const styles = {
   viewingContainer: {
     width: '100%',
     boxSizing: 'border-box',
-    fontWeight: 'bold',
+    fontWeight: 'normal',
   },
 
   loginSection: {
