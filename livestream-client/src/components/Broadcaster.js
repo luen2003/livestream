@@ -432,7 +432,7 @@ export default function Broadcaster() {
         </div>
       ) : (
         <div>
-          <div style={{ fontSize: 14, marginBottom: 10, fontWeight: '500', color: '#000' }}>
+          <div style={{ fontSize: 14, marginBottom: 10, fontWeight: 'bold', color: '#000' }}>
             Tên livestream: <span>{streamName}</span> | Người livestream: {userName} | Viewer(s): {viewerCount}
           </div>
 

@@ -277,7 +277,7 @@ export default function Viewer({ broadcasterId }) {
     <div style={styles.container}>
       {!isViewing ? (
         <div style={styles.loginSection}>
-          <h2 style={{ fontSize: 24, marginBottom: 10, fontWeight: '500', color: '#000' }}>
+          <h2 style={{fontSize: 24, marginBottom: 10, fontWeight: 'bold', color: '#000' }}>
             Nhập tên để xem livestream
           </h2>
 
@@ -305,14 +305,13 @@ export default function Viewer({ broadcasterId }) {
           </button>
         </div>
       ) : (
-          <div style={{ ...styles.viewingContainer }}>
-            <div style={{ ...styles.viewerInfo, fontWeight: 500 }}>
-              Đang xem livestream |{' '}
-              <span>
-                Viewer(s): {viewerCount}
-              </span>
-            </div>
-
+        <div style={styles.viewingContainer}>
+          <div style={styles.viewerInfo}>
+            Đang xem livestream |{' '}
+            <span>
+              Viewer(s): {viewerCount}
+            </span>
+          </div>
 
           <audio
             ref={audioRef}
@@ -406,7 +405,7 @@ const styles = {
   viewingContainer: {
     width: '100%',
     boxSizing: 'border-box',
-    fontWeight: '500',
+    fontWeight: 'bold',
   },
 
   loginSection: {
@@ -451,7 +450,7 @@ const styles = {
     width: '100%',
     fontSize: 14,
     marginBottom: 5,
-    fontWeight: 500,
+    fontWeight: 'bold',
   },
 
   videoContainer: {
