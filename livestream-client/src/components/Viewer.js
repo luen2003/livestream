@@ -309,7 +309,7 @@ export default function Viewer({ broadcasterId }) {
           <div style={styles.viewerInfo}>
             Đang xem livestream |{' '}
             <span>
-              Viewers: {viewerCount}
+              Viewer(s): {viewerCount}
             </span>
           </div>
 
@@ -405,6 +405,7 @@ const styles = {
   viewingContainer: {
     width: '100%',
     boxSizing: 'border-box',
+    fontWeight: 'bold',
   },
 
   loginSection: {
@@ -447,7 +448,7 @@ const styles = {
 
   viewerInfo: {
     width: '100%',
-    fontSize: 14,
+    fontSize: 12,
     marginBottom: 5,
   },
 

@@ -133,7 +133,7 @@ const styles = {
 
   streamTitle: {
     fontSize: 18,
-    fontWeight: 'bold',
+    // fontWeight: 'bold',
     marginBottom: 8,
   },
 
@@ -166,8 +166,8 @@ const styles = {
 
   viewerTitle: {
     marginBottom: 10,
-    fontSize: 26,
-    fontWeight: 'bold',
+    fontSize: 24,
+    // fontWeight: 'bold',
   },
 
   exitButton: {
