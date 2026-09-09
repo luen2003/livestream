@@ -520,7 +520,7 @@ export default function Broadcaster() {
             </button>
           </div>
           <Chat broadcasterId={socket.id} />
-          <button onClick={stopStreaming} style={{ marginTop: 10, backgroundColor: '#ff4d4f', color: 'white', border: 'none', padding: '10px 20px', width: '100%' }}>Dừng Livestream Và Tải Xuống Video Livestream</button>
+          <button onClick={stopStreaming} style={{ marginTop: 10, backgroundColor: '#ff4d4f', color: 'white', border: 'none', padding: '10px 20px', width: '100%' }}>Dừng Livestream Và Tải Video Livestream Xuống</button>
         </div>
       )}
     </div>

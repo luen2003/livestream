@@ -3,17 +3,23 @@ import { socket } from '../socket';
 import Chat from './Chat';
 
 export default function Viewer({ broadcasterId }) {
-  const screenVideo = useRef();
-  const cameraVideo = useRef();
-  const audioRef = useRef();    
-  
+  const screenVideo = useRef(null);
+  const cameraVideo = useRef(null);
+  const audioRef = useRef(null);
+
   const [userName, setUserName] = useState('');
   const [isViewing, setIsViewing] = useState(false);
   const [viewerCount, setViewerCount] = useState(0);
   const [error, setError] = useState('');
 
   const [hasCameraStream, setHasCameraStream] = useState(false);
-  const [broadcasterMediaState, setBroadcasterMediaState] = useState({ videoEnabled: true, audioEnabled: true });
+
+  const [broadcasterMediaState, setBroadcasterMediaState] =
+    useState({
+      videoEnabled: true,
+      audioEnabled: true,
+    });
+
   const [streamEnded, setStreamEnded] = useState(false);
   const [redirectTimer, setRedirectTimer] = useState(3);
 
@@ -22,22 +28,29 @@ export default function Viewer({ broadcasterId }) {
       setError('Vui lòng nhập tên');
       return;
     }
+
     setError('');
     setIsViewing(true);
-    socket.emit('setUserName', userName);
+
+    socket.emit('setUserName', userName.trim());
     socket.emit('watcher', broadcasterId);
   };
 
   useEffect(() => {
-    if (!isViewing || !broadcasterId) return;
+    if (!isViewing || !broadcasterId) {
+      return;
+    }
 
     const pc = new RTCPeerConnection({
-        iceServers:  [
-        { urls: ['stun:hk-turn1.xirsys.com'] },
+      iceServers: [
+        {
+          urls: ['stun:hk-turn1.xirsys.com'],
+        },
         {
           username:
             'aX_0HogGPHRGNvdzUm4KbELKRKa2e1-XXU7ykTjLzxPvYGtToLCCxE85kSodQr4uAAAAAGh001hkbHVvbmd0YQ==',
-          credential: '3e8fc950-6098-11f0-9c7a-0242ac120004',
+          credential:
+            '3e8fc950-6098-11f0-9c7a-0242ac120004',
           urls: [
             'turn:hk-turn1.xirsys.com:80?transport=udp',
             'turn:hk-turn1.xirsys.com:3478?transport=udp',
@@ -47,125 +60,279 @@ export default function Viewer({ broadcasterId }) {
             'turns:hk-turn1.xirsys.com:5349?transport=tcp',
           ],
         },
-        { urls: 'stun:stun.l.google.com:19302' },
+        {
+          urls: 'stun:stun.l.google.com:19302',
+        },
       ],
     });
 
-    pc.ontrack = (e) => {
-      if (e.track.kind === 'video') {
-        if (!screenVideo.current.srcObject) {
-          screenVideo.current.srcObject = e.streams[0];
-          setHasCameraStream(false); 
-        } else if (screenVideo.current.srcObject.id !== e.streams[0].id) {
-          if(cameraVideo.current) {
-             cameraVideo.current.srcObject = e.streams[0];
-             setHasCameraStream(true); 
+    pc.ontrack = (event) => {
+      if (event.track.kind === 'video') {
+        if (!screenVideo.current?.srcObject) {
+          if (screenVideo.current) {
+            screenVideo.current.srcObject =
+              event.streams[0];
           }
+
+          setHasCameraStream(false);
+        } else if (
+          screenVideo.current.srcObject.id !==
+          event.streams[0].id
+        ) {
+          if (cameraVideo.current) {
+            cameraVideo.current.srcObject =
+              event.streams[0];
+          }
+
+          setHasCameraStream(true);
         }
       }
-      
-      if (e.track.kind === 'audio') {
+
+      if (event.track.kind === 'audio') {
         if (audioRef.current) {
-          audioRef.current.srcObject = e.streams[0];
-          const playPromise = audioRef.current.play();
+          audioRef.current.srcObject =
+            event.streams[0];
+
+          const playPromise =
+            audioRef.current.play();
+
           if (playPromise !== undefined) {
-            playPromise.catch(error => {
-              console.log("Auto-play audio bị chặn, cần tương tác người dùng:", error);
+            playPromise.catch((error) => {
+              console.log(
+                'Auto-play audio bị chặn:',
+                error
+              );
             });
           }
         }
       }
     };
 
-    pc.onicecandidate = (e) => {
-      if (e.candidate) socket.emit('candidate', broadcasterId, e.candidate);
+    pc.onicecandidate = (event) => {
+      if (event.candidate) {
+        socket.emit(
+          'candidate',
+          broadcasterId,
+          event.candidate
+        );
+      }
     };
 
-    socket.on('offer', async (id, desc) => {
-      if (id !== broadcasterId) return;
+    const handleOffer = async (id, desc) => {
+      if (id !== broadcasterId) {
+        return;
+      }
+
       setHasCameraStream(false);
-      if(screenVideo.current) screenVideo.current.srcObject = null;
-      if(cameraVideo.current) cameraVideo.current.srcObject = null;
-      if(audioRef.current) audioRef.current.srcObject = null;
 
-      await pc.setRemoteDescription(new RTCSessionDescription(desc));
-      const answer = await pc.createAnswer();
-      await pc.setLocalDescription(answer);
-      socket.emit('answer', broadcasterId, pc.localDescription);
-    });
+      if (screenVideo.current) {
+        screenVideo.current.srcObject = null;
+      }
 
-    socket.on('candidate', (id, candidate) => {
-      if (id !== broadcasterId) return;
-      pc.addIceCandidate(new RTCIceCandidate(candidate));
-    });
+      if (cameraVideo.current) {
+        cameraVideo.current.srcObject = null;
+      }
 
-    socket.on('viewerCount', (count) => setViewerCount(count));
+      if (audioRef.current) {
+        audioRef.current.srcObject = null;
+      }
 
-    socket.on('media-state-changed', ({ videoEnabled, audioEnabled }) => {
-      setBroadcasterMediaState({ videoEnabled, audioEnabled });
-    });
+      try {
+        await pc.setRemoteDescription(
+          new RTCSessionDescription(desc)
+        );
 
-    socket.on('stream-ended', () => {
+        const answer = await pc.createAnswer();
+
+        await pc.setLocalDescription(answer);
+
+        socket.emit(
+          'answer',
+          broadcasterId,
+          pc.localDescription
+        );
+      } catch (error) {
+        console.error(
+          'Lỗi xử lý offer:',
+          error
+        );
+      }
+    };
+
+    const handleCandidate = async (
+      id,
+      candidate
+    ) => {
+      if (id !== broadcasterId) {
+        return;
+      }
+
+      try {
+        await pc.addIceCandidate(
+          new RTCIceCandidate(candidate)
+        );
+      } catch (error) {
+        console.error(
+          'Lỗi thêm ICE candidate:',
+          error
+        );
+      }
+    };
+
+    const handleViewerCount = (count) => {
+      setViewerCount(count);
+    };
+
+    const handleMediaStateChanged = ({
+      videoEnabled,
+      audioEnabled,
+    }) => {
+      setBroadcasterMediaState({
+        videoEnabled,
+        audioEnabled,
+      });
+    };
+
+    const handleStreamEnded = () => {
       setStreamEnded(true);
+
       let countdown = 3;
+
+      setRedirectTimer(countdown);
+
       const interval = setInterval(() => {
         countdown -= 1;
+
         setRedirectTimer(countdown);
+
         if (countdown <= 0) {
           clearInterval(interval);
           window.location.href = '/';
         }
       }, 1000);
-    });
+    };
 
-    socket.on('change-stream-mode', ({ mode }) => {
-      if (mode !== 'both') setHasCameraStream(false);
-    });
+    const handleChangeStreamMode = ({ mode }) => {
+      if (mode !== 'both') {
+        setHasCameraStream(false);
+
+        if (cameraVideo.current) {
+          cameraVideo.current.srcObject = null;
+        }
+      }
+    };
+
+    socket.on('offer', handleOffer);
+    socket.on('candidate', handleCandidate);
+    socket.on(
+      'viewerCount',
+      handleViewerCount
+    );
+    socket.on(
+      'media-state-changed',
+      handleMediaStateChanged
+    );
+    socket.on(
+      'stream-ended',
+      handleStreamEnded
+    );
+    socket.on(
+      'change-stream-mode',
+      handleChangeStreamMode
+    );
 
     return () => {
-      socket.emit('disconnectPeer', broadcasterId);
-      socket.off('offer');
-      socket.off('candidate');
-      socket.off('viewerCount');
-      socket.off('media-state-changed');
-      socket.off('stream-ended');
-      socket.off('change-stream-mode');
+      socket.emit(
+        'disconnectPeer',
+        broadcasterId
+      );
+
+      socket.off('offer', handleOffer);
+      socket.off(
+        'candidate',
+        handleCandidate
+      );
+      socket.off(
+        'viewerCount',
+        handleViewerCount
+      );
+      socket.off(
+        'media-state-changed',
+        handleMediaStateChanged
+      );
+      socket.off(
+        'stream-ended',
+        handleStreamEnded
+      );
+      socket.off(
+        'change-stream-mode',
+        handleChangeStreamMode
+      );
+
       pc.close();
     };
   }, [isViewing, broadcasterId]);
 
   return (
-    <div>
+    <div style={styles.container}>
       {!isViewing ? (
-        <div>
-          <h2>Nhập tên để xem livestream</h2>
-          <input placeholder="Tên của bạn" value={userName} onChange={(e) => setUserName(e.target.value)} style={{ width: '100%', marginBottom: 10, height: 40 }} />
-          {error && <div style={{ color: 'red', marginBottom: 10 }}>{error}</div>}
-          <button onClick={handleStartViewing} style={{ width: '100%', height: 45, backgroundColor: '#1890ff', color: 'white', border: 'none' }}>Vào xem ngay</button>
+        <div style={styles.loginSection}>
+          <h2>
+            Nhập tên để xem livestream
+          </h2>
+
+          <input
+            placeholder="Tên của bạn"
+            value={userName}
+            onChange={(e) =>
+              setUserName(e.target.value)
+            }
+            style={styles.nameInput}
+          />
+
+          {error && (
+            <div style={styles.error}>
+              {error}
+            </div>
+          )}
+
+          {/* NÚT VÀO XEM NGAY */}
+          <button
+            onClick={handleStartViewing}
+            style={styles.startButton}
+          >
+            Vào xem ngay
+          </button>
         </div>
       ) : (
-        <div>
-          <div style={{ fontSize: 14, marginBottom: 5 }}>Đang xem livestream | <b>Viewers: {viewerCount}</b></div>
+        <div style={styles.viewingContainer}>
+          <div style={styles.viewerInfo}>
+            Đang xem livestream |{' '}
+            <b>
+              Viewers: {viewerCount}
+            </b>
+          </div>
 
-          <audio ref={audioRef} autoPlay playsInline style={{ display: 'none' }} />
+          <audio
+            ref={audioRef}
+            autoPlay
+            playsInline
+            style={{ display: 'none' }}
+          />
 
-          <div style={{ 
-            position: 'relative', 
-            width: '100%', 
-            background: '#000', 
-            height: '80vh', 
-            borderRadius: 8, 
-            overflow: 'hidden', 
-          }}>
-            
-            <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 10, display: 'flex', gap: 10 }}>
+          {/* VIDEO LIVESTREAM */}
+          <div style={styles.videoContainer}>
+            <div
+              style={styles.statusContainer}
+            >
               {!broadcasterMediaState.videoEnabled && (
-                <span style={{ background: '#ff4d4f', color: 'white', padding: '4px 8px', borderRadius: 4 }}>
+                <span style={styles.offStatus}>
                   Cam Off
                 </span>
               )}
+
               {!broadcasterMediaState.audioEnabled && (
-                <span style={{ background: '#ff4d4f', color: 'white', padding: '4px 8px', borderRadius: 4 }}>
+                <span style={styles.offStatus}>
                   Mic Off
                 </span>
               )}
@@ -176,46 +343,192 @@ export default function Viewer({ broadcasterId }) {
               autoPlay
               playsInline
               controls={false}
-              muted 
-              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+              muted
+              style={styles.screenVideo}
             />
 
-            <div style={{ 
-              display: hasCameraStream ? 'block' : 'none',
-              position: 'absolute', 
-              bottom: 20,
-              right: 20,
-              width: '200px',
-              height: '150px',
-              borderRadius: 8,
-              border: '2px solid white',
-              overflow: 'hidden',
-              background: '#000',
-              zIndex: 20,
-              boxShadow: '0 4px 10px rgba(0,0,0,0.5)'
-            }}>
+            {/* CAMERA PIP */}
+            <div
+              style={{
+                ...styles.cameraContainer,
+                display: hasCameraStream
+                  ? 'block'
+                  : 'none',
+              }}
+            >
               <video
                 ref={cameraVideo}
                 autoPlay
                 playsInline
-                muted 
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                muted
+                style={styles.cameraVideo}
               />
             </div>
 
+            {/* LIVESTREAM ĐÃ KẾT THÚC */}
             {streamEnded && (
-              <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'white', zIndex: 100 }}>
-                <h2>Livestream đã kết thúc</h2>
-                <p>Quay về trang chủ sau {redirectTimer}s...</p>
+              <div
+                style={
+                  styles.streamEndedOverlay
+                }
+              >
+                <h2>
+                  Livestream đã kết thúc
+                </h2>
+
+                <p>
+                  Quay về trang chủ sau{' '}
+                  {redirectTimer}s...
+                </p>
               </div>
             )}
           </div>
 
-          <div style={{ marginTop: 10 }}>
-             <Chat broadcasterId={broadcasterId} />
+          {/* CHAT */}
+          <div style={styles.chatContainer}>
+            <Chat
+              broadcasterId={broadcasterId}
+            />
           </div>
         </div>
       )}
     </div>
   );
 }
+
+const styles = {
+  container: {
+    width: '100%',
+    boxSizing: 'border-box',
+  },
+
+  viewingContainer: {
+    width: '100%',
+    boxSizing: 'border-box',
+  },
+
+  loginSection: {
+    width: '100%',
+    boxSizing: 'border-box',
+  },
+
+  nameInput: {
+    width: '100%',
+    height: 40,
+    marginBottom: 10,
+    padding: '0 10px',
+    boxSizing: 'border-box',
+    border: '1px solid #ccc',
+    borderRadius: 5,
+    fontSize: 14,
+  },
+
+  error: {
+    color: 'red',
+    marginBottom: 10,
+  },
+
+  /*
+   * Nút này cao 45px
+   */
+  startButton: {
+    width: '100%',
+    height: 45,
+    padding: 0,
+    backgroundColor: '#1890ff',
+    color: 'white',
+    border: 'none',
+    borderRadius: 5,
+    cursor: 'pointer',
+    fontSize: 15,
+    fontWeight: 'bold',
+    boxSizing: 'border-box',
+  },
+
+  viewerInfo: {
+    width: '100%',
+    fontSize: 14,
+    marginBottom: 5,
+  },
+
+  /*
+   * VIDEO
+   * width = 100%
+   */
+  videoContainer: {
+    position: 'relative',
+    width: '100%',
+    height: '80vh',
+    background: '#000',
+    borderRadius: 8,
+    overflow: 'hidden',
+    boxSizing: 'border-box',
+  },
+
+  statusContainer: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    zIndex: 10,
+    display: 'flex',
+    gap: 10,
+  },
+
+  offStatus: {
+    background: '#ff4d4f',
+    color: 'white',
+    padding: '4px 8px',
+    borderRadius: 4,
+  },
+
+  screenVideo: {
+    display: 'block',
+    width: '100%',
+    height: '100%',
+    objectFit: 'contain',
+  },
+
+  cameraContainer: {
+    position: 'absolute',
+    bottom: 20,
+    right: 20,
+    width: 200,
+    height: 150,
+    borderRadius: 8,
+    border: '2px solid white',
+    overflow: 'hidden',
+    background: '#000',
+    zIndex: 20,
+    boxShadow:
+      '0 4px 10px rgba(0,0,0,0.5)',
+  },
+
+  cameraVideo: {
+    display: 'block',
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover',
+  },
+
+  streamEndedOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor:
+      'rgba(0,0,0,0.85)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: 'white',
+    zIndex: 100,
+  },
+
+  chatContainer: {
+    width: '100%',
+    marginTop: 10,
+    boxSizing: 'border-box',
+  },
+};
