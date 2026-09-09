@@ -448,7 +448,7 @@ const styles = {
 
   viewerInfo: {
     width: '100%',
-    fontSize: 12,
+    fontSize: 14,
     marginBottom: 5,
   },
 
