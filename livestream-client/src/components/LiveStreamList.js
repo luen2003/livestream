@@ -40,7 +40,6 @@ export default function LiveStreamList() {
         Danh sách Livestream đang phát
       </h2>
 
-      {/* DANH SÁCH LIVESTREAM */}
       <div style={styles.listWrapper}>
         {streams.length === 0 ? (
           <p style={styles.noStreamText}>
@@ -59,9 +58,7 @@ export default function LiveStreamList() {
                 </p>
 
                 <button
-                  onClick={() =>
-                    setSelectedBroadcasterId(stream.id)
-                  }
+                  onClick={() => setSelectedBroadcasterId(stream.id)}
                   style={styles.watchButton}
                 >
                   Xác nhận và xem Livestream
@@ -72,7 +69,6 @@ export default function LiveStreamList() {
         )}
       </div>
 
-      {/* KHU VỰC XEM LIVESTREAM */}
       {selectedBroadcasterId && (
         <div style={styles.viewerSection}>
           <h3 style={styles.viewerTitle}>
@@ -82,7 +78,7 @@ export default function LiveStreamList() {
 
           <Viewer broadcasterId={selectedBroadcasterId} />
 
-          {/* NÚT THOÁT - CÙNG WIDTH VÀ HEIGHT VỚI VIDEO / NÚT VÀO XEM */}
+          {/* Nút thoát có cùng chiều cao 45px và rộng 100% như nút Vào xem ngay */}
           <button
             onClick={handleExitStream}
             style={styles.exitButton}
@@ -114,6 +110,7 @@ const styles = {
 
   listWrapper: {
     width: '100%',
+    textAlign: 'left',
   },
 
   listContainer: {
@@ -147,17 +144,13 @@ const styles = {
   },
 
   watchButton: {
-    width: '100%',
-    height: 45,
-    padding: '0 15px',
+    padding: '10px 15px',
     backgroundColor: '#1976d2',
     color: 'white',
     border: 'none',
     borderRadius: 5,
     cursor: 'pointer',
-    fontSize: 15,
-    fontWeight: 'bold',
-    boxSizing: 'border-box',
+    width: 'fit-content',
   },
 
   noStreamText: {
@@ -177,29 +170,20 @@ const styles = {
     fontWeight: 'bold',
   },
 
-  /*
-   * QUAN TRỌNG:
-   * Nút này có:
-   * - width: 100% -> rộng bằng video
-   * - height: 45px -> cao bằng nút "Vào xem ngay"
-   */
   exitButton: {
-    width: '100%',
-    height: 45,
     marginTop: 10,
-    padding: '0 15px',
+    width: '100%',
+    height: 45, // Set cứng chiều cao bằng nút "Vào xem ngay"
     boxSizing: 'border-box',
-
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: 'bold',
-
-    backgroundColor: '#e53935',
+    backgroundColor: '#e53935', // Màu đỏ báo hiệu thoát
     color: '#fff',
-
     border: 'none',
-    borderRadius: 5,
-
+    borderRadius: 5, // Khớp với borderRadius của nút Xem ngay
     cursor: 'pointer',
-    textAlign: 'center',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center', 
   },
 };
