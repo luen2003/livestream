@@ -139,7 +139,7 @@ const styles = {
 
   streamUser: {
     fontSize: 14,
-    color: '#555',
+    color: '#000',
     marginBottom: 15,
   },
 
@@ -166,7 +166,7 @@ const styles = {
 
   viewerTitle: {
     marginBottom: 10,
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: 'bold',
   },
 

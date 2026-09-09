@@ -433,7 +433,7 @@ export default function Broadcaster() {
       ) : (
         <div>
           <div style={{ fontSize: 14, marginBottom: 10 }}>
-            Tên livestream: <b>{streamName}</b> | Người livestream: {userName} | Viewers: {viewerCount}
+            Tên livestream: <span>{streamName}</span> | Người livestream: {userName} | Viewers: {viewerCount}
           </div>
 
           <div style={{ marginBottom: 10, display: 'flex', gap: 10 }}>
