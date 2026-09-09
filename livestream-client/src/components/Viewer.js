@@ -277,9 +277,9 @@ export default function Viewer({ broadcasterId }) {
     <div style={styles.container}>
       {!isViewing ? (
         <div style={styles.loginSection}>
-          <h2 style={{fontSize: 24, marginBottom: 10, fontWeight: 'bold', color: '#000' }}>
+          <h3 style={{fontSize: 24, marginBottom: 10, fontWeight: 'bold', color: '#000' }}>
             Nhập tên để xem livestream
-          </h2>
+          </h3>
 
           <input
             placeholder="Tên của bạn"
