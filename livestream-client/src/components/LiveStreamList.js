@@ -53,9 +53,9 @@ export default function LiveStreamList() {
                   Tên Livestream: {stream.livestreamName}
                 </h3>
 
-                <p style={styles.streamUser}>
+                <b style={styles.streamUser}>
                   Người phát: {stream.userName}
-                </p>
+                </b>
 
                 <button
                   onClick={() => setSelectedBroadcasterId(stream.id)}
@@ -166,21 +166,21 @@ const styles = {
 
   viewerTitle: {
     marginBottom: 10,
-    fontSize: 20,
+    fontSize: 28,
     fontWeight: 'bold',
   },
 
   exitButton: {
     marginTop: 10,
     width: '100%',
-    height: 45, // Set cứng chiều cao bằng nút "Vào xem ngay"
+    height: 45,
     boxSizing: 'border-box',
     fontSize: 16,
-    fontWeight: 'bold',
-    backgroundColor: '#e53935', // Màu đỏ báo hiệu thoát
+    // fontWeight: 'bold',
+    backgroundColor: '#e53935',
     color: '#fff',
     border: 'none',
-    borderRadius: 5, // Khớp với borderRadius của nút Xem ngay
+    borderRadius: 5,
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',

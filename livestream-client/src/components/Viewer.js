@@ -308,9 +308,9 @@ export default function Viewer({ broadcasterId }) {
         <div style={styles.viewingContainer}>
           <div style={styles.viewerInfo}>
             Đang xem livestream |{' '}
-            <b>
+            <span>
               Viewers: {viewerCount}
-            </b>
+            </span>
           </div>
 
           <audio
@@ -441,7 +441,7 @@ const styles = {
     borderRadius: 5,
     cursor: 'pointer',
     fontSize: 15,
-    fontWeight: 'bold',
+    // fontWeight: 'bold',
     boxSizing: 'border-box',
   },
 
