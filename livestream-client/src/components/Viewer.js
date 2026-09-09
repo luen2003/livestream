@@ -450,12 +450,9 @@ const styles = {
     width: '100%',
     fontSize: 14,
     marginBottom: 5,
+    fontWeight: '500',
   },
 
-  /*
-   * VIDEO
-   * width = 100%
-   */
   videoContainer: {
     position: 'relative',
     width: '100%',
