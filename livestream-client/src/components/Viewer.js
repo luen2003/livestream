@@ -6,6 +6,7 @@ export default function Viewer({ broadcasterId }) {
   const screenVideo = useRef(null);
   const cameraVideo = useRef(null);
   const audioRef = useRef(null);
+  const isPortrait = typeof window !== 'undefined' && window.innerHeight > window.innerWidth;
 
   const [userName, setUserName] = useState('');
   const [isViewing, setIsViewing] = useState(false);
@@ -277,7 +278,7 @@ export default function Viewer({ broadcasterId }) {
     <div style={styles.container}>
       {!isViewing ? (
         <div style={styles.loginSection}>
-          <h3 style={{fontSize: 23, marginBottom: 10, fontWeight: 'bold', color: '#000' }}>
+          <h3 style={{ fontSize: 23, marginBottom: 10, fontWeight: 'bold', color: '#000' }}>
             Nhập tên để xem livestream
           </h3>
 
@@ -321,10 +322,13 @@ export default function Viewer({ broadcasterId }) {
           />
 
           {/* VIDEO LIVESTREAM */}
-          <div style={styles.videoContainer}>
-            <div
-              style={styles.statusContainer}
-            >
+          <div style={{
+            ...styles.videoContainer,
+            aspectRatio: isPortrait ? '9/16' : '4/3', // Thêm tỉ lệ khung hình y hệt Broadcaster
+            maxHeight: '85vh', // Đồng bộ chiều cao với Broadcaster
+            height: 'auto'
+          }}>
+            <div style={styles.statusContainer}>
               {!broadcasterMediaState.videoEnabled && (
                 <span style={styles.offStatus}>
                   Cam Off
@@ -456,11 +460,13 @@ const styles = {
   videoContainer: {
     position: 'relative',
     width: '100%',
-    height: '80vh',
+    // height: '80vh',
     background: '#000',
     borderRadius: 8,
     overflow: 'hidden',
     boxSizing: 'border-box',
+    margin: '0 auto', 
+    maxWidth: '900px',
   },
 
   statusContainer: {
@@ -483,7 +489,7 @@ const styles = {
     display: 'block',
     width: '100%',
     height: '100%',
-    objectFit: 'contain',
+    objectFit: 'cover',
   },
 
   cameraContainer: {
