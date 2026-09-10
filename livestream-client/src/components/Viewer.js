@@ -6,7 +6,7 @@ export default function Viewer({ broadcasterId }) {
   const screenVideo = useRef(null);
   const cameraVideo = useRef(null);
   const audioRef = useRef(null);
-  const isPortrait = typeof window !== 'undefined' && window.innerHeight > window.innerWidth;
+  const [videoRatio, setVideoRatio] = useState('16/9'); // Mặc định là khung ngang
 
   const [userName, setUserName] = useState('');
   const [isViewing, setIsViewing] = useState(false);
@@ -324,7 +324,7 @@ export default function Viewer({ broadcasterId }) {
           {/* VIDEO LIVESTREAM */}
           <div style={{
             ...styles.videoContainer,
-            aspectRatio: isPortrait ? '9/16' : '4/3', // Thêm tỉ lệ khung hình y hệt Broadcaster
+            aspectRatio: videoRatio, // Thêm tỉ lệ khung hình y hệt Broadcaster
             maxHeight: '85vh', // Đồng bộ chiều cao với Broadcaster
             height: 'auto'
           }}>
@@ -349,6 +349,12 @@ export default function Viewer({ broadcasterId }) {
               controls={false}
               muted
               style={styles.screenVideo}
+              onLoadedMetadata={(e) => {
+                const { videoWidth, videoHeight } = e.target;
+                if (videoWidth && videoHeight) {
+                  setVideoRatio(`${videoWidth}/${videoHeight}`);
+                }
+              }}
             />
 
             {/* CAMERA PIP */}
@@ -465,7 +471,7 @@ const styles = {
     borderRadius: 8,
     overflow: 'hidden',
     boxSizing: 'border-box',
-    margin: '0 auto', 
+    margin: '0 auto',
     maxWidth: '900px',
   },
 
