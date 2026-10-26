@@ -160,12 +160,13 @@ const styles = {
 
   viewerSection: {
     width: '100%',
-    marginTop: 40,
+    marginTop: 15,
     textAlign: 'left',
   },
 
   viewerTitle: {
-    marginBottom: 10,
+    marginTop: 5,
+    marginBottom: -10,
     fontSize: 24,
     // fontWeight: 'bold',
   },
