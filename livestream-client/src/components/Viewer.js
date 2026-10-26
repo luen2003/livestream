@@ -295,7 +295,7 @@ export default function Viewer({ broadcasterId }) {
 
 const styles = {
   container: { width: '100%', boxSizing: 'border-box' },
-  viewingContainer: { width: '100%', boxSizing: 'border-box', fontWeight: 'bold' },
+  viewingContainer: { width: '100%', boxSizing: 'border-box', fontWeight: 'bold', marginTop: 18 },
   loginSection: { width: '100%', boxSizing: 'border-box' },
   nameInput: {
     width: '100%',
